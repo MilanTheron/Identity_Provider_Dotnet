@@ -52,6 +52,42 @@ public class SecurityService
 
         return true; // Allowed
     }
+    
+    public Task<bool> ValidateJtiAsync(string jti)
+    {
+        if (string.IsNullOrEmpty(jti))
+            return Task.FromResult(false);
+
+        if (!ValidJtis.TryGetValue(jti, out var expiry))
+            return Task.FromResult(false);
+
+        if (DateTime.UtcNow > expiry)
+        {
+            // cleanup expired token
+            ValidJtis.TryRemove(jti, out _);
+            return Task.FromResult(false);
+        }
+
+        return Task.FromResult(true);
+    }
+    
+    public Task StoreJtiAsync(string jti, DateTime expiry)
+    {
+        if (string.IsNullOrEmpty(jti))
+            return Task.CompletedTask;
+
+        ValidJtis[jti] = expiry;
+        return Task.CompletedTask;
+    }
+    
+    public Task RevokeJtiAsync(string jti)
+    {
+        if (string.IsNullOrEmpty(jti))
+            return Task.CompletedTask;
+
+        ValidJtis.TryRemove(jti, out _);
+        return Task.CompletedTask;
+    }
 
     public void RecordFailedAttempt(string clientIp)
     {
@@ -73,5 +109,7 @@ public class SecurityService
     public static TimeSpan GetLockoutDuration() => TimeSpan.FromMinutes(AccountLockoutMinutes);
 
     public static int GetFailedAttemptsThreshold() => FailedAttemptsBeforeLockout;
+    
+    private static readonly ConcurrentDictionary<string, DateTime> ValidJtis = new();
 }
 

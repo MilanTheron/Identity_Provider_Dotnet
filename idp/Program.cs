@@ -20,23 +20,53 @@ builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<BackupCodeService>();
 builder.Services.AddScoped<SecurityService>();
 
-// Configure JWT Authentication
+var jwtKey = builder.Configuration["Jwt:Key"]
+             ?? throw new InvalidOperationException("Jwt:Key not configured");
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        options.RequireHttpsMetadata = true;
+
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ClockSkew = TimeSpan.Zero,
+            ClockSkew = TimeSpan.FromSeconds(30),
+
             ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
+
+            ValidateAudience = true,
             ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])), // key not setup yet (appsettings.json)
+
+            ValidateLifetime = true,
+            RequireExpirationTime = true,
+
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
 
             NameClaimType = JwtRegisteredClaimNames.Sub,
-            RoleClaimType = System.Security.Claims.ClaimTypes.Role
+        };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var jti = context.Principal.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+
+                if (jti == null)
+                {
+                    context.Fail("Missing jti");
+                    return;
+                }
+
+                var securityService = context.HttpContext.RequestServices
+                    .GetRequiredService<SecurityService>();
+
+                if (!await securityService.ValidateJtiAsync(jti))
+                {
+                    context.Fail("Invalid token");
+                }
+            }
         };
     });
 
@@ -62,6 +92,11 @@ app.Use(async (context, next) =>
 
     // Prevent MIME sniffing
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+    
+    context.Response.Headers["X-XSS-Protection"] = "1; mode=block";
+    context.Response.Headers["Referrer-Policy"] = "no-referrer";
+    context.Response.Headers["Strict-Transport-Security"] =
+        "max-age=31536000; includeSubDomains";
 
     // Content Security Policy
     context.Response.Headers["Content-Security-Policy"] =

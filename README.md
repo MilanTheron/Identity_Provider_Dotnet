@@ -37,7 +37,7 @@
 - ✅ Implement refresh token rotation (new token per use)
 - ✅ Store refresh tokens securely (hashed if possible)
 - ✅ Detect refresh token reuse and revoke session chain
-- ⏳ Include proper claims validation in all consumers - *Basic validation done*
+- ✅ Include proper claims validation in all consumers
 - ❌ Store (username, key) tuples instead of password hash
 - ❌ Authenticate users via passkey
 
