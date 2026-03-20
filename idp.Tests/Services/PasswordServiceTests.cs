@@ -45,4 +45,38 @@ public class PasswordServiceTests
         Assert.True(await passwordService.IsWeak(pwnedPassword));
         Assert.False(await passwordService.IsWeak(safePassword));
     }
+    
+    [Fact]
+    public void VerifyPassword_CorrectPassword_ReturnsTrue()
+    {
+        string password = "StrongPa55word!";
+        string hashed = _passwordService.HashPassword(password);
+
+        bool result = _passwordService.VerifyPassword(password, hashed);
+
+        Assert.True(result);
+    }
+
+    [Fact]
+    public void VerifyPassword_WrongPassword_ReturnsFalse()
+    {
+        string password = "StrongPa55word!";
+        string wrongPassword = "WrongPa55word!";
+        string hashed = _passwordService.HashPassword(password);
+
+        bool result = _passwordService.VerifyPassword(wrongPassword, hashed);
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void VerifyPassword_InvalidHashFormat_ReturnsFalse()
+    {
+        string password = "StrongPa55word!";
+        string invalidHash = "invalidhashwithoutcolon";
+
+        bool result = _passwordService.VerifyPassword(password, invalidHash);
+
+        Assert.False(result);
+    }
 }
