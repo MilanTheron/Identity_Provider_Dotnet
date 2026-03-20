@@ -35,7 +35,7 @@
 ### Implementation Status
 - ✅ Use short-lived access tokens (30 minutes)
 - ✅ Implement refresh token rotation (new token per use)
-- ⏳ Store refresh tokens securely (hashed if possible) - *Stored in DB, not hashed*
+- ✅ Store refresh tokens securely (hashed if possible)
 - ✅ Detect refresh token reuse and revoke session chain
 - ⏳ Include proper claims validation in all consumers - *Basic validation done*
 - ❌ Store (username, key) tuples instead of password hash
@@ -262,8 +262,8 @@
 - Token validation testing
 
 ### Implementation Status
-- ⏳ Unit tests for services
-- ❌ Integration tests for auth flows
+- ✅ Unit tests for services
+- ⏳ Integration tests for auth flows
 - ⏳ Simulate attack scenarios
 - ❌ Validate token expiration and revocation
 - ❌ Test MFA edge cases (clock drift, reuse)

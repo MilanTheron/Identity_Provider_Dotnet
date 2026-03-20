@@ -2,6 +2,7 @@
 using Xunit;
 using idp.Services;
 
+namespace idp.Tests.Services
 public class PasswordServiceTests
 {
     private class TestPasswordService : PasswordService

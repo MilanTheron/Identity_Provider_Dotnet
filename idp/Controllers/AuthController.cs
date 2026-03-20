@@ -124,11 +124,11 @@ public class AuthController : ControllerBase
 
         // Generate tokens
         var accessToken = _tokenService.GenerateJwtToken(user);
-        var refreshTokenValue = _tokenService.GenerateRefreshToken(); // Need to store HASH REFRESH TOKEN through HashToken method of TokenService
+        var refreshTokenValue = _tokenService.GenerateRefreshToken();
 
         var refreshToken = new RefreshToken
         {
-            Token = refreshTokenValue,
+            Token = _tokenService.HashToken(refreshTokenValue), // Store hashed version
             JwtId = Guid.NewGuid().ToString(),
             UserId = user.Username,
             ExpiryDate = DateTime.UtcNow.AddDays(7)
@@ -181,7 +181,7 @@ public class AuthController : ControllerBase
 
         var newRefreshToken = new RefreshToken
         {
-            Token = newRefreshTokenValue,
+            Token = _tokenService.HashToken(newRefreshTokenValue), // Store hashed version
             JwtId = Guid.NewGuid().ToString(),
             UserId = user.Username,
             ExpiryDate = DateTime.UtcNow.AddDays(7)
@@ -218,8 +218,9 @@ public class AuthController : ControllerBase
     [HttpPost("logout")]
     public async Task<IActionResult> Logout([FromBody] LogoutRequest request)
     {
+        var requestHash = _tokenService.HashToken(request.RefreshToken);
         var storedToken = await _context.Set<RefreshToken>()
-            .FirstOrDefaultAsync(rt => rt.Token == request.RefreshToken);
+            .FirstOrDefaultAsync(rt => rt.Token == requestHash && !rt.IsRevoked && rt.ExpiryDate >= DateTime.UtcNow);
 
         if (storedToken != null && !storedToken.IsRevoked)
         {
