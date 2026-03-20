@@ -262,11 +262,16 @@
 - Token validation testing
 
 ### Implementation Status
-- ❌ Unit tests for services
+- ⏳ Unit tests for services
 - ❌ Integration tests for auth flows
-- ❌ Simulate attack scenarios
+- ⏳ Simulate attack scenarios
 - ❌ Validate token expiration and revocation
 - ❌ Test MFA edge cases (clock drift, reuse)
+
+##### Test command used:
+```bash
+dotnet test
+```
 
 **Status**: Not started
 
@@ -275,10 +280,8 @@
 ## Recommended Next Steps (Priority Order)
 
 ### HIGH PRIORITY
-1. **Add Security Headers** - Quick win for security
-2. **Password Policy Enforcement** - Length, complexity requirements
-3. **Logging & Audit Trail** - Track all auth events
-4. **Unit Tests** - Cover critical services
+1. **Logging & Audit Trail** - Track all auth events
+2. **Unit Tests** - Cover critical services
 
 ### MEDIUM PRIORITY
 5. **Email Verification** - Add email service integration

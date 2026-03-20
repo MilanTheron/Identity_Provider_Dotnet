@@ -56,14 +56,14 @@ public class PasswordService
     
     public async Task<bool> IsWeak(string password)
     {
-        bool pwned = await CheckHaveIBeenPwned(password);
-        bool regexOk = CheckRegex(password);
-        return pwned || !regexOk;
+        bool pwned = await CheckHaveIBeenPwned(password); // true if pwned
+        bool regexOk = CheckRegex(password); // true if strong regex
+        return pwned || !regexOk; // true if weak or pwned
     }
 
     private bool CheckRegex(string password)
     {
-        string pattern = @"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&^#()[\]{}|\\/\-+_.:;=,~`])[^\s<>]{8,}$";
+        string pattern = @"^(?=.*[A-Z])(?=.*[@$!%*?&^#()[\]{}|\\/\-+_.:;=,~`])(?=.*[0-9])(?=.*[a-z]).{12,}$";
         return Regex.IsMatch(password, pattern);
     }
 
