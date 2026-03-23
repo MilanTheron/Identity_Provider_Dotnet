@@ -35,7 +35,7 @@ public class AuthController : ControllerBase
             return BadRequest("User already exists");
         
         if (await _passwordService.IsWeak(request.Password))
-            return BadRequest("Password is too weak, need: One maj letter, One number, One special character, Min 8 chars");
+            return BadRequest(@"Password is too weak, need: One maj letter, One min letter, One number, One special character([@$!%*?&^#()[\\]{}|\\\\/\\-+_.:;=,~`]), Min 12 chars");
 
         var user = new User
         {

@@ -22,13 +22,13 @@ public class WebAuthnService
     }
 
     // REGISTRATION
-    public CredentialCreateOptions StartRegistration(string username, string userId)
+    public CredentialCreateOptions StartRegistration(string username, int userId)
     {
         var user = new Fido2User
         {
             DisplayName = username,
             Name = username,
-            Id = Encoding.UTF8.GetBytes(userId)
+            Id = Encoding.UTF8.GetBytes(userId.ToString())
         };
 
         var existingCreds = _context.WebAuthnCredentials
@@ -50,7 +50,7 @@ public class WebAuthnService
     }
 
     public async Task<WebAuthnCredential> FinishRegistration(
-        string userId,
+        int userId,
         AuthenticatorAttestationRawResponse clientResponse)
     {
         var options = _cache.Get<CredentialCreateOptions>($"registration:{userId}");
@@ -102,7 +102,7 @@ public class WebAuthnService
     }
 
     public async Task<bool> FinishLogin(
-        string userId,
+        int userId,
         AuthenticatorAssertionRawResponse clientResponse,
         WebAuthnCredential storedCredential)
     {
