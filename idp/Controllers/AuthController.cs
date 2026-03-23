@@ -1,8 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
-using System.Security.Cryptography;
-using System.Text;
 using OtpNet;
 using idp.Data;
 using idp.Models;
@@ -20,24 +18,14 @@ public class AuthController : ControllerBase
     private readonly TokenService _tokenService;
     private readonly BackupCodeService _backupCodeService;
     private readonly SecurityService _securityService;
-    private readonly WebAuthnService _webAuthnService;
 
-    public AuthController(AppDbContext context, WebAuthnService webAuthnService, PasswordService passwordService, TokenService tokenService, BackupCodeService backupCodeService, SecurityService securityService)
+    public AuthController(AppDbContext context, PasswordService passwordService, TokenService tokenService, BackupCodeService backupCodeService, SecurityService securityService)
     {
         _context = context;
         _passwordService = passwordService;
         _tokenService = tokenService;
         _backupCodeService = backupCodeService;
         _securityService = securityService;
-        _webAuthnService = webAuthnService;
-    }
-
-    [Authorize]
-    [HttpGet("me")]
-    public IActionResult Me()
-    {
-        var username = User.Identity?.Name;
-        return Ok(new { username });
     }
 
     [HttpPost("register")]
@@ -62,33 +50,6 @@ public class AuthController : ControllerBase
         return Ok("User registered");
     }
     
-    [HttpPost("webauthn/register/start")]
-    public async Task<IActionResult> StartWebAuthnRegister([FromBody] WebAuthnRegisterRequest request)
-    {
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == request.Username);
-        if (user == null)
-            return BadRequest("User not found");
-
-        var options = _webAuthnService.StartRegistration(user.Username, user.Id.ToString());
-        return Ok(options);
-    }
-    
-    [HttpPost("webauthn/register/finish")]
-    public async Task<IActionResult> FinishWebAuthnRegister([FromBody] WebAuthnRegisterFinishRequest request)
-    {
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == request.Username);
-        if (user == null)
-            return BadRequest("User not found");
-
-        var credential = await _webAuthnService.FinishRegistration(user.Id.ToString(), request.ClientResponse);
-
-        return Ok(new
-        {
-            credentialId = Convert.ToBase64String(credential.CredentialIdBytes),
-            message = "WebAuthn registration successful"
-        });
-    }
-
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
@@ -115,35 +76,12 @@ public class AuthController : ControllerBase
             return Unauthorized("Account locked due to too many failed attempts");
 
         // Verify password
-        bool passwordValid = _passwordService.VerifyPassword(request.Password, user.PasswordHash);
-        if (!passwordValid)
-        {
-            user.FailedLoginAttempts++;
-            if (user.FailedLoginAttempts >= SecurityService.GetFailedAttemptsThreshold())
-            {
-                user.LockoutEnd = DateTime.UtcNow.Add(SecurityService.GetLockoutDuration());
-            }
-            await _context.SaveChangesAsync();
-            _securityService.RecordFailedAttempt(clientIp);
-            return Unauthorized("Invalid username or password");
-        }
+        if (!_passwordService.VerifyPassword(request.Password, user.PasswordHash))
+            return await FailLogin(user, clientIp, "Invalid username or password");
 
         // Password correct, now check MFA if enabled
-        if (user.IsTotpEnabled)
-        {
-            bool mfaValid = ValidateMFA(request, user);
-            if (!mfaValid)
-            {
-                user.FailedLoginAttempts++;
-                if (user.FailedLoginAttempts >= SecurityService.GetFailedAttemptsThreshold())
-                {
-                    user.LockoutEnd = DateTime.UtcNow.Add(SecurityService.GetLockoutDuration());
-                }
-                await _context.SaveChangesAsync();
-                _securityService.RecordFailedAttempt(clientIp);
-                return Unauthorized("Invalid MFA code");
-            }
-        }
+        if (user.IsTotpEnabled && !ValidateMFA(request, user))
+            return await FailLogin(user, clientIp, "Invalid MFA code");
 
         // Reset failed attempts and lockout on successful login
         user.FailedLoginAttempts = 0;
@@ -161,86 +99,13 @@ public class AuthController : ControllerBase
             UserId = user.Username,
             ExpiryDate = DateTime.UtcNow.AddDays(7)
         };
+        
         _context.Add(refreshToken);
         await _context.SaveChangesAsync();
 
         _securityService.ClearFailedAttempts(clientIp);
 
         return Ok(new { AccessToken = accessToken, RefreshToken = refreshTokenValue });
-    }
-    
-    [HttpPost("token/refresh")]
-    public async Task<IActionResult> Refresh([FromBody] RefreshRequest request)
-    {
-        if (string.IsNullOrEmpty(request.RefreshToken))
-            return BadRequest("Refresh token is required");
-        
-        var candidateTokens = await _context.Set<RefreshToken>()
-            .Where(rt => !rt.IsRevoked && rt.ExpiryDate >= DateTime.UtcNow)
-            .ToListAsync();
-        
-        RefreshToken? storedToken = null;
-        var requestBytes = Encoding.UTF8.GetBytes(request.RefreshToken);
-
-        // Constant-time comparison
-        foreach (var token in candidateTokens)
-        {
-            var tokenBytes = Encoding.UTF8.GetBytes(token.Token);
-            if (CryptographicOperations.FixedTimeEquals(tokenBytes, requestBytes))
-            {
-                storedToken = token;
-                break;
-            }
-        }
-        
-        if (storedToken == null || storedToken.IsRevoked || storedToken.ExpiryDate < DateTime.UtcNow)
-            return Unauthorized("Invalid refresh token");
-
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == storedToken.UserId);
-        if (user == null)
-            return Unauthorized("User not found");
-
-        // Revoke old token
-        storedToken.IsRevoked = true;
-
-        // Generate new tokens
-        var newAccessToken = _tokenService.GenerateJwtToken(user);
-        var newRefreshTokenValue = _tokenService.GenerateRefreshToken();
-
-        var newRefreshToken = new RefreshToken
-        {
-            Token = _tokenService.HashToken(newRefreshTokenValue), // Store hashed version
-            JwtId = Guid.NewGuid().ToString(),
-            UserId = user.Username,
-            ExpiryDate = DateTime.UtcNow.AddDays(7)
-        };
-        _context.Add(newRefreshToken);
-        await _context.SaveChangesAsync();
-
-        return Ok(new { AccessToken = newAccessToken, RefreshToken = newRefreshTokenValue });
-    }
-
-    [HttpPost("setup-totp")]
-    public async Task<IActionResult> SetupTotp([FromBody] SetupTotpRequest request)
-    {
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == request.Username);
-        if (user == null)
-            return NotFound();
-
-        var secret = KeyGeneration.GenerateRandomKey(20);
-        user.TotpSecret = Base32Encoding.ToString(secret);
-        user.IsTotpEnabled = true;
-
-        // Generate backup codes
-        var plainCodes = _backupCodeService.GenerateBackupCodes();
-        var hashedCodes = plainCodes.Select(code => _backupCodeService.HashBackupCode(code)).ToList();
-        user.BackupCodes = hashedCodes;
-
-        await _context.SaveChangesAsync();
-
-        var qrCodeUrl = $"otpauth://totp/Idp:{user.Username}?secret={user.TotpSecret}&issuer=Idp";
-
-        return Ok(new { Secret = user.TotpSecret, QrCodeUrl = qrCodeUrl, BackupCodes = plainCodes });
     }
 
     [HttpPost("logout")]
@@ -321,6 +186,24 @@ public class AuthController : ControllerBase
             }
         }
 
+        return false;
+    }
+    
+    private async Task<IActionResult> FailLogin(User user, string clientIp, string message)
+    {
+        await HandleFailedAttempt(user, clientIp);
+        return Unauthorized(message);
+    }
+    
+    private async Task<bool> HandleFailedAttempt(User user, string clientIp)
+    {
+        user.FailedLoginAttempts++;
+        if (user.FailedLoginAttempts >= SecurityService.GetFailedAttemptsThreshold())
+        {
+            user.LockoutEnd = DateTime.UtcNow.Add(SecurityService.GetLockoutDuration());
+        }
+        await _context.SaveChangesAsync();
+        _securityService.RecordFailedAttempt(clientIp);
         return false;
     }
 }
