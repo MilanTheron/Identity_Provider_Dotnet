@@ -20,14 +20,16 @@ public class AuthController : ControllerBase
     private readonly TokenService _tokenService;
     private readonly BackupCodeService _backupCodeService;
     private readonly SecurityService _securityService;
+    private readonly WebAuthnService _webAuthnService;
 
-    public AuthController(AppDbContext context, PasswordService passwordService, TokenService tokenService, BackupCodeService backupCodeService, SecurityService securityService)
+    public AuthController(AppDbContext context, WebAuthnService webAuthnService, PasswordService passwordService, TokenService tokenService, BackupCodeService backupCodeService, SecurityService securityService)
     {
         _context = context;
         _passwordService = passwordService;
         _tokenService = tokenService;
         _backupCodeService = backupCodeService;
         _securityService = securityService;
+        _webAuthnService = webAuthnService;
     }
 
     [Authorize]
@@ -58,6 +60,33 @@ public class AuthController : ControllerBase
         await _context.SaveChangesAsync();
 
         return Ok("User registered");
+    }
+    
+    [HttpPost("webauthn/register/start")]
+    public async Task<IActionResult> StartWebAuthnRegister([FromBody] WebAuthnRegisterRequest request)
+    {
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == request.Username);
+        if (user == null)
+            return BadRequest("User not found");
+
+        var options = _webAuthnService.StartRegistration(user.Username, user.Id.ToString());
+        return Ok(options);
+    }
+    
+    [HttpPost("webauthn/register/finish")]
+    public async Task<IActionResult> FinishWebAuthnRegister([FromBody] WebAuthnRegisterFinishRequest request)
+    {
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == request.Username);
+        if (user == null)
+            return BadRequest("User not found");
+
+        var credential = await _webAuthnService.FinishRegistration(user.Id.ToString(), request.ClientResponse);
+
+        return Ok(new
+        {
+            credentialId = Convert.ToBase64String(credential.CredentialIdBytes),
+            message = "WebAuthn registration successful"
+        });
     }
 
     [HttpPost("login")]
