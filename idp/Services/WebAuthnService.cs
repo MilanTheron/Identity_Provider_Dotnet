@@ -95,6 +95,9 @@ public class WebAuthnService
             allowedCredentials,
             UserVerificationRequirement.Preferred
         );
+        
+        if (options == null)
+            throw new Exception("Login options not found");
 
         _cache.Set($"login:{userId}", options, TimeSpan.FromMinutes(5));
 
