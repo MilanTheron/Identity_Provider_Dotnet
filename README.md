@@ -38,10 +38,10 @@
 - ✅ Store refresh tokens securely (hashed if possible)
 - ✅ Detect refresh token reuse and revoke session chain
 - ✅ Include proper claims validation in all consumers
-- ❌ Store (username, key) tuples instead of password hash
-- ❌ Authenticate users via passkey
+- ✅ Store (username, key) tuples
+- ⏳ Authenticate users via passkey
 
-**Files**: `TokenService.cs`, `RefreshToken.cs`
+**Files**: `TokenService.cs`, `RefreshToken.cs`, `AuthController.cs`, `Program.cs`
 
 ---
 
