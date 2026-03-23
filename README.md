@@ -39,7 +39,7 @@
 - ✅ Detect refresh token reuse and revoke session chain
 - ✅ Include proper claims validation in all consumers
 - ✅ Store (username, key) tuples
-- ⏳ Authenticate users via passkey
+- ✅ Authenticate users via passkey
 
 **Files**: `TokenService.cs`, `RefreshToken.cs`, `AuthController.cs`, `Program.cs`
 
@@ -72,10 +72,10 @@
 - JWKS (JSON Web Key Set)
 
 ### Implementation Status
-- ❌ Issue ID tokens (JWT with user identity claims)
+- ✅ Issue ID tokens (JWT with user identity claims)
 - ❌ Add /.well-known/openid-configuration endpoint
 - ❌ Add /.well-known/jwks.json endpoint
-- ❌ Include proper claims (sub, email, etc.)
+- ✅ Include proper claims (sub, email, etc.)
 - ❌ Sign tokens using asymmetric keys (RSA)
 
 **Status**: Not started
@@ -180,7 +180,7 @@
 - ✅ Account lockout (5 failed attempts → 15 min lockout)
 - ✅ Progressive difficulty (exponential backoff)
 - ✅ Reset counter on successful login
-- ⏳ Combine with CAPTCHA - *Not implemented*
+- ❌ Combine with CAPTCHA - *Not implemented*
 - ⏳ Distributed rate limiting - *In-memory only, not Redis*
 
 **Files**: `SecurityService.cs`, `AuthController.cs`
@@ -216,7 +216,7 @@
 - ✅ Enforce HTTPS everywhere
 - ✅ Add HSTS headers
 - ✅ Configure CSP, X-Frame-Options, X-Content-Type-Options
-- ❓ Disable insecure HTTP methods if unused
+- ✅ Disable insecure HTTP methods if unused
 
 **Files**: `Program.cs`
 
@@ -262,7 +262,7 @@
 - Token validation testing
 
 ### Implementation Status
-- ✅ Unit tests for services
+- ⏳ Unit tests for services
 - ⏳ Integration tests for auth flows
 - ⏳ Simulate attack scenarios
 - ❌ Validate token expiration and revocation
@@ -277,11 +277,10 @@ dotnet test
 
 ---
 
-## Recommended Next Steps (Priority Order)
+## Next Steps (Priority Order)
 
 ### HIGH PRIORITY
 1. **Logging & Audit Trail** - Track all auth events
-2. **Unit Tests** - Cover critical services
 
 ### MEDIUM PRIORITY
 5. **Email Verification** - Add email service integration
@@ -292,7 +291,6 @@ dotnet test
 
 ### LOW PRIORITY (Future)
 10. **Anomaly Detection** - Geo-IP, impossible travel
-11. **WebAuthn/FIDO2** - Passwordless authentication
 12. **Redis Integration** - Distributed rate limiting
 
 ---
