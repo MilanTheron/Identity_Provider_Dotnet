@@ -51,8 +51,7 @@ public class AuthController : ControllerBase
         {
             Username = request.Username,
             PasswordHash = _passwordService.HashPassword(request.Password),
-            Email = request.Email,
-            Phone = request.Phone
+            Email = request.Email
         };
 
         _context.Users.Add(user);
