@@ -9,4 +9,5 @@ public class AppDbContext : DbContext
 
     public DbSet<User> Users { get; set; }
     public DbSet<WebAuthnCredential> WebAuthnCredentials { get; set; }
+    public DbSet<AuthorizationCode>  AuthorizationCodes { get; set; }
 }

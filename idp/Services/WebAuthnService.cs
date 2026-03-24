@@ -3,6 +3,7 @@ using Fido2NetLib.Objects;
 using System.Text;
 using idp.Data;
 using idp.Models;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 

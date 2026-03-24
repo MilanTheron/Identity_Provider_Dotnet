@@ -33,8 +33,7 @@ public class TotpController : ControllerBase
 
         // Generate backup codes
         var plainCodes = _backupCodeService.GenerateBackupCodes();
-        var hashedCodes = plainCodes.Select(code => _backupCodeService.HashBackupCode(code)).ToList();
-        user.BackupCodes = hashedCodes;
+        user.BackupCodes = plainCodes.Select(code => _backupCodeService.HashBackupCode(code)).ToList(); // Save codes(hash) into user
 
         await _context.SaveChangesAsync();
 

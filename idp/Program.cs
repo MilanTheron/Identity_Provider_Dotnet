@@ -21,7 +21,7 @@ builder.Services.AddScoped<BackupCodeService>();
 builder.Services.AddScoped<SecurityService>();
 
 var jwtKey = builder.Configuration["Jwt:Key"]
-             ?? throw new InvalidOperationException("Jwt:Key not configured");
+             ?? throw new InvalidOperationException("Jwt:Key not configured"); // rotate keys periodically or store them securely in Azure Key Vault, AWS KMS, etc.
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -51,7 +51,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         {
             OnTokenValidated = async context =>
             {
-                var jti = context.Principal.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+                var jti = context.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
 
                 if (jti == null)
                 {

@@ -50,7 +50,7 @@ public class TokenController : ControllerBase
 
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == storedToken.UserId);
         if (user == null)
-            return Unauthorized("User not found");
+            return BadRequest("User not found");
 
         // Revoke old token
         storedToken.IsRevoked = true;

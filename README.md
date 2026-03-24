@@ -54,11 +54,11 @@
 - PKCE (code challenge / verifier)
 
 ### Implementation Status
-- ❌ Build /authorize endpoint (code issuance)
-- ❌ Build /token endpoint (code → token exchange)
-- ❌ Enforce strict redirect URI matching
-- ❌ Implement PKCE verification
-- ❌ Store authorization codes securely (short-lived, one-time use)
+- ✅ Build /authorize endpoint (code issuance)
+- ✅ Build /token endpoint (code → token exchange)
+- ✅ Enforce strict redirect URI matching
+- ✅ Implement PKCE verification
+- ✅ Store authorization codes securely (short-lived, one-time use)
 
 **Status**: Not started
 
