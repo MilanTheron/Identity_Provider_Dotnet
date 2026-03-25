@@ -28,16 +28,16 @@ public class OAuthController : Controller
     [HttpGet("authorize")]
     public async Task<IActionResult> Authorize([FromQuery] AuthorizeRequest request)
     {
-        if (request.Response_type != "code")
+        if (request.ResponseType != "code")
             return BadRequest("invalid_response_type");
 
         var client = await _context.Set<OAuthClient>()
-            .FirstOrDefaultAsync(c => c.ClientId == request.Client_id);
+            .FirstOrDefaultAsync(c => c.ClientId == request.ClientId);
 
         if (client == null)
             return BadRequest("invalid_client");
 
-        if (!client.RedirectUris.Any(uri => uri.Equals(request.Redirect_uri, StringComparison.Ordinal)))
+        if (!client.RedirectUris.Any(uri => uri.Equals(request.RedirectUri, StringComparison.Ordinal)))
             return BadRequest("invalid_redirect_uri");
         
         if (string.IsNullOrEmpty(request.State))
@@ -46,8 +46,8 @@ public class OAuthController : Controller
         // enforce PKCE if required
         if (client.RequirePkce)
         {
-            if (string.IsNullOrEmpty(request.Code_challenge) ||
-                request.Code_challenge_method != "S256")
+            if (string.IsNullOrEmpty(request.CodeChallenge) ||
+                request.CodeChallengeMethod != "S256")
             {
                 return BadRequest("invalid_pkce");
             }
@@ -58,11 +58,12 @@ public class OAuthController : Controller
         var authCode = new AuthorizationCode
         {
             Code = code,
-            ClientId = request.Client_id,
-            RedirectUri = request.Redirect_uri,
-            CodeChallenge = request.Code_challenge,
-            CodeChallengeMethod = request.Code_challenge_method,
+            ClientId = request.ClientId,
+            RedirectUri = request.RedirectUri,
+            CodeChallenge = request.CodeChallenge,
+            CodeChallengeMethod = request.CodeChallengeMethod,
             ExpiresAt = DateTime.UtcNow.AddMinutes(5),
+            Used = false,
             UserId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
         };
 
@@ -70,7 +71,7 @@ public class OAuthController : Controller
         await _context.SaveChangesAsync();
 
         // redirect back with code + state
-        var redirectUrl = $"{request.Redirect_uri}?code={code}&state={request.State}";
+        var redirectUrl = $"{request.RedirectUri}?code={code}&state={request.State}";
 
         return Redirect(redirectUrl);
     }
@@ -79,11 +80,11 @@ public class OAuthController : Controller
     [HttpPost("token")]
     public async Task<IActionResult> Token([FromForm] TokenRequest request)
     {
-        if (request.Grant_type != "authorization_code")
+        if (request.GrantType != "authorization_code")
             return BadRequest("unsupported_grant_type");
 
         var client = await _context.Set<OAuthClient>()
-            .FirstOrDefaultAsync(c => c.ClientId == request.Client_id);
+            .FirstOrDefaultAsync(c => c.ClientId == request.ClientId);
 
         if (client == null)
             return BadRequest("invalid_client");
@@ -93,21 +94,21 @@ public class OAuthController : Controller
 
         if (authCode == null ||
             authCode.ExpiresAt < DateTime.UtcNow ||
-            authCode.RedirectUri != request.Redirect_uri ||
-            authCode.ClientId != request.Client_id)
+            authCode.RedirectUri != request.RedirectUri ||
+            authCode.ClientId != request.ClientId)
             return BadRequest("invalid_grant");
 
-        if (authCode.used)
+        if (authCode.Used)
             return BadRequest("invalid_grant");
 
         // PKCE
         if (!string.IsNullOrEmpty(authCode.CodeChallenge))
         {
-            if (string.IsNullOrEmpty(request.Code_verifier))
+            if (string.IsNullOrEmpty(request.CodeVerifier))
                 return BadRequest("invalid_grant");
 
             var hashed = Convert.ToBase64String(
-                    SHA256.HashData(Encoding.ASCII.GetBytes(request.Code_verifier)))
+                    SHA256.HashData(Encoding.ASCII.GetBytes(request.CodeVerifier)))
                 .TrimEnd('=')
                 .Replace('+', '-')
                 .Replace('/', '_');
@@ -122,10 +123,10 @@ public class OAuthController : Controller
         if (user == null)
             return BadRequest("invalid_grant");
 
-        authCode.used = true;
+        authCode.Used = true;
 
         var accessToken = await _tokenService.GenerateJwtToken(user, true);
-        var refreshTokenValue = _tokenService.GenerateRefreshToken();
+        var refreshTokenValue = TokenService.GenerateRefreshToken();
 
         var refreshToken = new RefreshToken
         {

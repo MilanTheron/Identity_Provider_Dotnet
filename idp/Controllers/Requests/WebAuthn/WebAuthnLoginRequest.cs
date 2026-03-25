@@ -1,6 +1,6 @@
-﻿namespace idp.Controllers.Requests;
+﻿namespace idp.Controllers.Requests.WebAuthn;
 
 public class WebAuthnLoginRequest
 {
-    public string Username { get; set; }
+    public required string Username { get; set; }
 }

@@ -1,14 +1,16 @@
-﻿namespace idp.Models;
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace idp.Models;
 
 public class AuthorizationCode
 {
     public int Id { get; set; }
-    public string Code { get; set; }
-    public string ClientId { get; set; }
-    public string RedirectUri { get; set; }
-    public string CodeChallenge { get; set; }
-    public string CodeChallengeMethod { get; set; }
+    public required string Code { get; set; }
+    public required string ClientId { get; set; }
+    public required string RedirectUri { get; set; }
+    public required string CodeChallenge { get; set; }
+    public required string CodeChallengeMethod { get; set; }
+    public required string UserId { get; set; }
+    public required bool Used { get; set; }
     public DateTime ExpiresAt { get; set; }
-    public string UserId { get; set; }
-    public bool used { get; set; }
 }

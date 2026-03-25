@@ -90,7 +90,7 @@ public class SecurityService
         return Task.CompletedTask;
     }
 
-    public void RecordFailedAttempt(string clientIp)
+    public static void RecordFailedAttempt(string clientIp)
     {
         if (string.IsNullOrEmpty(clientIp))
             return;

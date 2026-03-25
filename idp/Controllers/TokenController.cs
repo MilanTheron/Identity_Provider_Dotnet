@@ -59,7 +59,7 @@ public class TokenController : ControllerBase
 
         // Generate new tokens
         var newAccessToken = _tokenService.GenerateJwtToken(user, true);
-        var newRefreshTokenValue = _tokenService.GenerateRefreshToken();
+        var newRefreshTokenValue = TokenService.GenerateRefreshToken();
 
         var newRefreshToken = new RefreshToken
         {

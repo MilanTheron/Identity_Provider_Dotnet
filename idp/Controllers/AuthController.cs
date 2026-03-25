@@ -71,7 +71,7 @@ public class AuthController : ControllerBase
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == request.Username);
         if (user == null)
         {
-            _securityService.RecordFailedAttempt(clientIp);
+            SecurityService.RecordFailedAttempt(clientIp);
             return Unauthorized("Invalid username or password");
         }
 
@@ -80,7 +80,7 @@ public class AuthController : ControllerBase
             return Unauthorized("Account locked due to too many failed attempts");
 
         // Verify password
-        if (!_passwordService.VerifyPassword(request.Password, user.PasswordHash))
+        if (!PasswordService.VerifyPassword(request.Password, user.PasswordHash))
             return await FailLogin(user, clientIp, "Invalid username or password");
 
         // Password correct, now check MFA if enabled
@@ -91,7 +91,7 @@ public class AuthController : ControllerBase
             if (string.IsNullOrEmpty(request.TotpCode) && string.IsNullOrEmpty(request.BackupCode))
                 return Unauthorized("MFA required");
 
-            if (!ValidateMFA(request, user))
+            if (!ValidateMfa(request, user))
                 return await FailLogin(user, clientIp, "Invalid MFA code");
 
             mfaVerified = true;
@@ -107,7 +107,7 @@ public class AuthController : ControllerBase
 
         // Generate tokens
         var accessToken = await _tokenService.GenerateJwtToken(user, mfaVerified);
-        var refreshTokenValue = _tokenService.GenerateRefreshToken();
+        var refreshTokenValue = TokenService.GenerateRefreshToken();
 
         var refreshToken = new RefreshToken
         {
@@ -152,7 +152,7 @@ public class AuthController : ControllerBase
         if (user == null)
             return NotFound();
 
-        if (!_passwordService.VerifyPassword(request.OldPassword, user.PasswordHash))
+        if (!PasswordService.VerifyPassword(request.OldPassword, user.PasswordHash))
             return BadRequest("Invalid old password");
         
         if (request.NewPassword == request.OldPassword)
@@ -161,7 +161,7 @@ public class AuthController : ControllerBase
         if (await _passwordService.IsWeak(request.NewPassword))
             return BadRequest(@"Password is too weak, need: One maj letter, One min letter, One number, One special character([@$!%*?&^#()[\\]{}|\\\\/\\-+_.:;=,~`]), Min 12 chars");
 
-        using var transaction = await _context.Database.BeginTransactionAsync();
+        var transaction = await _context.Database.BeginTransactionAsync();
 
         user.PasswordHash = _passwordService.HashPassword(request.NewPassword);
 
@@ -177,7 +177,7 @@ public class AuthController : ControllerBase
         return Ok("Password changed and all sessions revoked");
     }
 
-    private bool ValidateMFA(LoginRequest request, User user)
+    private bool ValidateMfa(LoginRequest request, User user)
     {
         // TOTP
         if (!string.IsNullOrEmpty(request.TotpCode))
@@ -196,7 +196,7 @@ public class AuthController : ControllerBase
         // Backup code
         if (!string.IsNullOrEmpty(request.BackupCode) && user.BackupCodes != null)
         {
-            var hashedBackup = _backupCodeService.HashBackupCode(request.BackupCode.Trim());
+            var hashedBackup = BackupCodeService.HashBackupCode(request.BackupCode.Trim());
 
             var match = user.BackupCodes.FirstOrDefault(c =>
                 string.Equals(c, hashedBackup, StringComparison.Ordinal)
@@ -212,21 +212,20 @@ public class AuthController : ControllerBase
         return false;
     }
     
-    private async Task<IActionResult> FailLogin(User user, string clientIp, string message)
+    private Task<IActionResult> FailLogin(User user, string clientIp, string message)
     {
-        await HandleFailedAttempt(user, clientIp);
-        return Unauthorized(message);
+        HandleFailedAttempt(user, clientIp);
+        return Task.FromResult<IActionResult>(Unauthorized(message));
     }
     
-    private async Task<bool> HandleFailedAttempt(User user, string clientIp)
+    private void HandleFailedAttempt(User user, string clientIp)
     {
         user.FailedLoginAttempts++;
         if (user.FailedLoginAttempts >= SecurityService.GetFailedAttemptsThreshold())
         {
             user.LockoutEnd = DateTime.UtcNow.Add(SecurityService.GetLockoutDuration());
         }
-        await _context.SaveChangesAsync();
-        _securityService.RecordFailedAttempt(clientIp);
-        return false;
+        _context.SaveChangesAsync();
+        SecurityService.RecordFailedAttempt(clientIp);
     }
 }

@@ -6,7 +6,7 @@ namespace idp.Services;
 
 public class BackupCodeService
 {
-    public List<string> GenerateBackupCodes(int count = 10, int codeLength = 12)
+    public static List<string> GenerateBackupCodes(int count = 10, int codeLength = 12)
     {
         var codes = new List<string>();
         for (int i = 0; i < count; i++)
@@ -16,7 +16,7 @@ public class BackupCodeService
         return codes;
     }
     
-    public string HashBackupCode(string code)
+    public static string HashBackupCode(string code)
     {
         var salt = RandomNumberGenerator.GetBytes(16);
         using var hasher = new Argon2id(Encoding.UTF8.GetBytes(code));
@@ -31,7 +31,7 @@ public class BackupCodeService
         return $"{Convert.ToBase64String(salt)}:{hash}";
     }
 
-    private string GenerateRandomCode(int length)
+    private static string GenerateRandomCode(int length)
     {
         const string validChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
         using var rng = RandomNumberGenerator.Create();
@@ -46,4 +46,3 @@ public class BackupCodeService
         return new string(result);
     }
 }
-

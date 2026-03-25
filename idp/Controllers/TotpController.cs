@@ -39,8 +39,8 @@ public class TotpController : ControllerBase
         user.IsTotpEnabled = true;
 
         // Generate backup codes
-        var plainCodes = _backupCodeService.GenerateBackupCodes();
-        user.BackupCodes = plainCodes.Select(code => _backupCodeService.HashBackupCode(code)).ToList(); // Save codes(hash) into user
+        var plainCodes = BackupCodeService.GenerateBackupCodes();
+        user.BackupCodes = plainCodes.Select(code => BackupCodeService.HashBackupCode(code)).ToList(); // Save codes(hash) into user
 
         await _context.SaveChangesAsync();
 

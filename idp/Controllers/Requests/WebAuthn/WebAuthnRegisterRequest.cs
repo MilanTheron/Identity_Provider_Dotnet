@@ -1,9 +1,6 @@
-﻿using System.ComponentModel.DataAnnotations;
-
-namespace idp.Controllers.Requests;
+﻿namespace idp.Controllers.Requests.WebAuthn;
 
 public class WebAuthnRegisterRequest
 {
-    [Required]
-    public string Username { get; set; }
+    public required string Username { get; set; }
 }

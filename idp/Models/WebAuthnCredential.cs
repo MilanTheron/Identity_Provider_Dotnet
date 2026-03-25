@@ -8,7 +8,7 @@ public class WebAuthnCredential
     public int Id { get; set; }
     
     public int UserId { get; set; }
-    public byte[] CredentialIdBytes { get; set; }
-    public byte[] PublicKey { get; set; }
+    public required byte[] CredentialIdBytes { get; set; }
+    public required byte[] PublicKey { get; set; }
     public uint SignCount { get; set; }
 }

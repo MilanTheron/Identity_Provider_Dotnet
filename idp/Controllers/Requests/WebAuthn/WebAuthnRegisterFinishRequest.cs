@@ -1,9 +1,9 @@
 ﻿using Fido2NetLib;
 
-namespace idp.Controllers.Requests;
+namespace idp.Controllers.Requests.WebAuthn;
 
 public class WebAuthnRegisterFinishRequest
 {
-    public string Username { get; set; }
-    public AuthenticatorAttestationRawResponse ClientResponse { get; set; }
+    public required string Username { get; set; }
+    public required AuthenticatorAttestationRawResponse ClientResponse { get; set; }
 }

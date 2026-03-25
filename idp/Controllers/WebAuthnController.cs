@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.AspNetCore.Authorization;
 using idp.Controllers.Requests;
+using idp.Controllers.Requests.WebAuthn;
 using idp.Services;
 using idp.Data;
 
