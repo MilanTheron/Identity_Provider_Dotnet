@@ -10,6 +10,6 @@ public class AuthorizeRequest
     public string State { get; set; }
 
     // PKCE
-    public string Code_challenge { get; set; }
+    public required string Code_challenge { get; set; }
     public string Code_challenge_method { get; set; } // "S256" 
 }

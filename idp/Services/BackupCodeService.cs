@@ -18,7 +18,7 @@ public class BackupCodeService
     
     public string HashBackupCode(string code)
     {
-        byte[] salt = Convert.FromBase64String("c2VjdXJlU2FsdFN0cmluZw=="); // TODO: Use secure, unique salt from configuration, .env?
+        var salt = RandomNumberGenerator.GetBytes(16);
         using var hasher = new Argon2id(Encoding.UTF8.GetBytes(code));
         hasher.Salt = salt;
         hasher.DegreeOfParallelism = 8;

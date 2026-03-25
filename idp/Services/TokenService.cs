@@ -18,7 +18,7 @@ public class TokenService
         _securityService = securityService;
     }
 
-    public async Task<string> GenerateJwtToken(User user)
+    public async Task<string> GenerateJwtToken(User user, bool mfaVerified)
     {
         var jti = Guid.NewGuid().ToString();
 
@@ -30,7 +30,8 @@ public class TokenService
             new Claim(JwtRegisteredClaimNames.Jti, jti),
             new Claim(JwtRegisteredClaimNames.Iat,
                 DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
-                ClaimValueTypes.Integer64)
+                ClaimValueTypes.Integer64),
+            new Claim("mfa", mfaVerified ? "true" : "false")
         };
 
         var keyString = _configuration["Jwt:Key"] 

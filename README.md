@@ -178,7 +178,7 @@
 - ✅ Rate limiting per IP (10 attempts per minute)
 - ✅ Track failed login attempts per user
 - ✅ Account lockout (5 failed attempts → 15 min lockout)
-- ✅ Progressive difficulty (exponential backoff)
+- ❌ Progressive difficulty (exponential backoff)
 - ✅ Reset counter on successful login
 - ❌ Combine with CAPTCHA - *Not implemented*
 - ⏳ Distributed rate limiting - *In-memory only, not Redis*
@@ -294,3 +294,37 @@ dotnet test
 12. **Redis Integration** - Distributed rate limiting
 
 ---
+
+### Different curl request for testing(local):
+1. Register a new user:
+```bash
+curl -k https://127.0.0.1:5001/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"test","password":"Test123!Strong"}'
+```
+2. Login with the new user:
+```bash
+curl -k https://127.0.0.1:5001/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"test","password":"Test123!Strong"}'
+```
+3. Enable MFA for the user (replace #TOKEN with actual JWT token):
+```bash
+curl -k https://127.0.0.1:5001/api/totp/setup-totp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer #TOKEN" \
+  -d '{"username":"test"}'
+```
+4. Login with MFA (replace CODE with actual TOTP code):
+```bash
+curl -k https://127.0.0.1:5001/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"test","password":"Test123!Strong","totpCode":"CODE"}'
+```
+5. Change password (replace #TOKEN with actual JWT token):
+```bash
+curl -k https://127.0.0.1:5001/api/auth/change-password \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer #TOKEN" \
+  -d '{"OldPassword":"Test123!Strong","NewPassword":"StrongestEverEverEver123123123!!!!@@@@"}'
+```

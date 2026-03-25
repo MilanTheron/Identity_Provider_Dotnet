@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 using idp.Controllers.Requests;
 using idp.Services;
 using idp.Data;
@@ -20,12 +21,18 @@ public class TotpController : ControllerBase
         _backupCodeService = backupCodeService;
     }
     
+    [Authorize]
     [HttpPost("setup-totp")]
     public async Task<IActionResult> SetupTotp([FromBody] SetupTotpRequest request)
     {
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == request.Username);
         if (user == null)
             return NotFound();
+        
+        if (user.IsTotpEnabled && !string.IsNullOrEmpty(user.TotpSecret))
+        {
+            return BadRequest("TOTP already enabled");
+        }
 
         var secret = KeyGeneration.GenerateRandomKey(20);
         user.TotpSecret = Base32Encoding.ToString(secret);

@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
+using System.IdentityModel.Tokens.Jwt;
 using OtpNet;
 using idp.Data;
 using idp.Models;
@@ -28,6 +29,7 @@ public class AuthController : ControllerBase
         _securityService = securityService;
     }
 
+    [AllowAnonymous]
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
@@ -46,10 +48,11 @@ public class AuthController : ControllerBase
 
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
-
+    
         return Ok("User registered");
     }
     
+    [AllowAnonymous]
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
@@ -57,6 +60,7 @@ public class AuthController : ControllerBase
         if (clientIp == null)
             return StatusCode(StatusCodes.Status500InternalServerError, "Unable to determine client IP");
 
+        // IP rate limiting: check too soon attempt
         if (!_securityService.CanAttemptLogin(clientIp, out var waitTime))
             return StatusCode(StatusCodes.Status429TooManyRequests, $"Please wait {waitTime?.TotalSeconds:F0} seconds before trying again.");
 
@@ -80,16 +84,29 @@ public class AuthController : ControllerBase
             return await FailLogin(user, clientIp, "Invalid username or password");
 
         // Password correct, now check MFA if enabled
-        if (user.IsTotpEnabled && !ValidateMFA(request, user))
-            return await FailLogin(user, clientIp, "Invalid MFA code");
+        bool mfaVerified = false;
+
+        if (user.IsTotpEnabled)
+        {
+            if (string.IsNullOrEmpty(request.TotpCode) && string.IsNullOrEmpty(request.BackupCode))
+                return Unauthorized("MFA required");
+
+            if (!ValidateMFA(request, user))
+                return await FailLogin(user, clientIp, "Invalid MFA code");
+
+            mfaVerified = true;
+        }
+        else
+            mfaVerified = true;
 
         // Reset failed attempts and lockout on successful login
         user.FailedLoginAttempts = 0;
         user.LockoutEnd = null;
+        _securityService.ClearFailedAttempts(clientIp); // clear IP record on successful login
         await _context.SaveChangesAsync();
 
         // Generate tokens
-        var accessToken = _tokenService.GenerateJwtToken(user);
+        var accessToken = await _tokenService.GenerateJwtToken(user, mfaVerified);
         var refreshTokenValue = _tokenService.GenerateRefreshToken();
 
         var refreshToken = new RefreshToken
@@ -103,11 +120,10 @@ public class AuthController : ControllerBase
         _context.Add(refreshToken);
         await _context.SaveChangesAsync();
 
-        _securityService.ClearFailedAttempts(clientIp);
-
         return Ok(new { AccessToken = accessToken, RefreshToken = refreshTokenValue });
     }
-
+    
+    [Authorize]
     [HttpPost("logout")]
     public async Task<IActionResult> Logout([FromBody] LogoutRequest request)
     {
@@ -124,11 +140,11 @@ public class AuthController : ControllerBase
         return Ok("Logged out");
     }
 
-    [Authorize]
+    [Authorize(Policy = "SensitiveOperation")]
     [HttpPost("change-password")]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
     {
-        var username = User.Identity?.Name;
+        var username = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
         if (string.IsNullOrEmpty(username))
             return Unauthorized();
 
@@ -143,45 +159,52 @@ public class AuthController : ControllerBase
             return BadRequest("New password cannot be the same as the old password");
         
         if (await _passwordService.IsWeak(request.NewPassword))
-            return BadRequest("New password is too weak, need: One maj letter, One number, One special character, Min 8 chars");
+            return BadRequest(@"Password is too weak, need: One maj letter, One min letter, One number, One special character([@$!%*?&^#()[\\]{}|\\\\/\\-+_.:;=,~`]), Min 12 chars");
+
+        using var transaction = await _context.Database.BeginTransactionAsync();
 
         user.PasswordHash = _passwordService.HashPassword(request.NewPassword);
 
-        // Revoke all refresh tokens for this user
-        var refreshTokens = await _context.Set<RefreshToken>()
+        // Revoke tokens
+        var tokens = await _context.RefreshTokens
             .Where(rt => rt.UserId == username && !rt.IsRevoked)
             .ToListAsync();
-        foreach (var token in refreshTokens)
-        {
-            token.IsRevoked = true;
-        }
+        tokens.ForEach(t => t.IsRevoked = true);
 
         await _context.SaveChangesAsync();
+        await transaction.CommitAsync();
 
         return Ok("Password changed and all sessions revoked");
     }
 
     private bool ValidateMFA(LoginRequest request, User user)
     {
-        // Try TOTP code first
+        // TOTP
         if (!string.IsNullOrEmpty(request.TotpCode))
         {
-            var totp = new Totp(Base32Encoding.ToBytes(user.TotpSecret));
+            if (string.IsNullOrEmpty(user.TotpSecret))
+                return false;
 
-            // allow ±1 time step (default step = 30s → total ~±30s drift)
+            var secretBytes = Base32Encoding.ToBytes(user.TotpSecret);
+            var totp = new Totp(secretBytes);
             var window = new VerificationWindow(previous: 1, future: 1);
 
-            if (totp.VerifyTotp(request.TotpCode, out _, window))
+            if (totp.VerifyTotp(request.TotpCode.Trim(), out _, window))
                 return true;
         }
 
-        // Try backup code
+        // Backup code
         if (!string.IsNullOrEmpty(request.BackupCode) && user.BackupCodes != null)
         {
-            var hashedBackup = _backupCodeService.HashBackupCode(request.BackupCode);
-            if (user.BackupCodes.Contains(hashedBackup))
+            var hashedBackup = _backupCodeService.HashBackupCode(request.BackupCode.Trim());
+
+            var match = user.BackupCodes.FirstOrDefault(c =>
+                string.Equals(c, hashedBackup, StringComparison.Ordinal)
+            );
+
+            if (match != null)
             {
-                user.BackupCodes.Remove(hashedBackup);
+                user.BackupCodes.Remove(match);
                 return true;
             }
         }

@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 using idp.Services;
 using idp.Data;
 using idp.Models;
@@ -21,6 +22,7 @@ public class TokenController : ControllerBase
         _tokenService = tokenService;
     }
     
+    [Authorize(Policy = "SensitiveOperation")]
     [HttpPost("token/refresh")]
     public async Task<IActionResult> Refresh([FromBody] RefreshRequest request)
     {
@@ -56,7 +58,7 @@ public class TokenController : ControllerBase
         storedToken.IsRevoked = true;
 
         // Generate new tokens
-        var newAccessToken = _tokenService.GenerateJwtToken(user);
+        var newAccessToken = _tokenService.GenerateJwtToken(user, true);
         var newRefreshTokenValue = _tokenService.GenerateRefreshToken();
 
         var newRefreshToken = new RefreshToken

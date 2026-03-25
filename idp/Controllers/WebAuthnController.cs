@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.Authorization;
 using idp.Controllers.Requests;
 using idp.Services;
 using idp.Data;
@@ -20,6 +21,7 @@ public class WebAuthnController : ControllerBase
         _webAuthnService = webAuthnService;
     }
 
+    [Authorize]
     [HttpPost("webauthn/register/start")]
     public async Task<IActionResult> StartWebAuthnRegister([FromBody] WebAuthnRegisterRequest request)
     {
@@ -31,6 +33,7 @@ public class WebAuthnController : ControllerBase
         return Ok(options);
     }
     
+    [Authorize]
     [HttpPost("webauthn/register/finish")]
     public async Task<IActionResult> FinishWebAuthnRegister([FromBody] WebAuthnRegisterFinishRequest request)
     {
@@ -47,6 +50,7 @@ public class WebAuthnController : ControllerBase
         });
     }
 
+    [AllowAnonymous]
     [HttpPost("webauthn/login/start")]
     public async Task<IActionResult> StartWebAuthnLogin([FromBody] WebAuthnLoginRequest request)
     {
@@ -64,6 +68,7 @@ public class WebAuthnController : ControllerBase
         return Ok(options);
     }
 
+    [AllowAnonymous]
     [HttpPost("webauthn/login/finish")]
     public async Task<IActionResult> FinishWebAuthnLogin([FromBody] WebAuthnLoginFinishRequest request)
     {

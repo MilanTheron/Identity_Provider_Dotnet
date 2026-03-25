@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Cryptography;
+using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using idp.Data;
 using idp.Models;
@@ -62,7 +63,7 @@ public class OAuthController : Controller
             CodeChallenge = request.Code_challenge,
             CodeChallengeMethod = request.Code_challenge_method,
             ExpiresAt = DateTime.UtcNow.AddMinutes(5),
-            UserId = User.Identity?.Name
+            UserId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
         };
 
         _context.AuthorizationCodes.Add(authCode);
@@ -74,6 +75,7 @@ public class OAuthController : Controller
         return Redirect(redirectUrl);
     }
 
+    [Authorize(Policy = "SensitiveOperation")]
     [HttpPost("token")]
     public async Task<IActionResult> Token([FromForm] TokenRequest request)
     {
@@ -122,7 +124,7 @@ public class OAuthController : Controller
 
         authCode.used = true;
 
-        var accessToken = await _tokenService.GenerateJwtToken(user);
+        var accessToken = await _tokenService.GenerateJwtToken(user, true);
         var refreshTokenValue = _tokenService.GenerateRefreshToken();
 
         var refreshToken = new RefreshToken

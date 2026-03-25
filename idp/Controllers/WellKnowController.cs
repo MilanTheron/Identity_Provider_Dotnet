@@ -1,6 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using System.Security.Cryptography;
-using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.Authorization;
 
 namespace idp.Controllers;
 
@@ -8,6 +7,7 @@ namespace idp.Controllers;
 [ApiController]
 public class WellKnownController : ControllerBase
 {
+    [AllowAnonymous]
     [HttpGet("openid-configuration")]
     public IActionResult OpenIdConfiguration()
     {

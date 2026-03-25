@@ -4,10 +4,10 @@ namespace idp.Services;
 
 public class SecurityService
 {
-    private static readonly ConcurrentDictionary<string, (int count, DateTime resetTime)> LoginAttempts = new();
+    private static readonly ConcurrentDictionary<string, (int count, DateTime resetTime, DateTime lastAttempt)> LoginAttempts = new();
     private const int MaxLoginAttempts = 10;
     private const int RateLimitWindowMinutes = 1;
-    private const int AccountLockoutMinutes = 15;
+    private const int AccountLockoutMinutes = 5;
     private const int FailedAttemptsBeforeLockout = 5;
     private const int TimeSinceLastAttemptLockout = 5; // seconds
 
@@ -16,18 +16,21 @@ public class SecurityService
         if (string.IsNullOrEmpty(clientIp))
             return true;
 
-        var attempts = LoginAttempts.GetOrAdd(clientIp, (0, DateTime.UtcNow.AddMinutes(RateLimitWindowMinutes)));
+        var now = DateTime.UtcNow;
 
-        if (attempts.count >= MaxLoginAttempts && DateTime.UtcNow < attempts.resetTime)
-            return true;
+        var attempts = LoginAttempts.AddOrUpdate(
+            clientIp,
+            (1, now.AddMinutes(RateLimitWindowMinutes), now),
+            (_, existing) =>
+            {
+                if (now >= existing.resetTime)
+                    return (1, now.AddMinutes(RateLimitWindowMinutes), now); // reset window
+                return (existing.count + 1, existing.resetTime, now);
+            }
+        );
 
-        // Reset if window has passed
-        if (DateTime.UtcNow >= attempts.resetTime)
-        {
-            LoginAttempts.TryUpdate(clientIp, (0, DateTime.UtcNow.AddMinutes(RateLimitWindowMinutes)), attempts);
-        }
-
-        return false;
+        // Check rate limit AFTER ensuring state is correct
+        return attempts.count > MaxLoginAttempts && now < attempts.resetTime;
     }
 
     public bool CanAttemptLogin(string clientIp, out TimeSpan? waitTime)
@@ -39,18 +42,16 @@ public class SecurityService
 
         if (LoginAttempts.TryGetValue(clientIp, out var attempts))
         {
-            // Calculate time since last attempt
-            var lastAttemptTime = attempts.resetTime.AddMinutes(-RateLimitWindowMinutes);
-            var timeSinceLastAttempt = DateTime.UtcNow - lastAttemptTime;
+            var timeSinceLastAttempt = DateTime.UtcNow - attempts.lastAttempt;
 
             if (timeSinceLastAttempt.TotalSeconds < TimeSinceLastAttemptLockout)
             {
                 waitTime = TimeSpan.FromSeconds(TimeSinceLastAttemptLockout) - timeSinceLastAttempt;
-                return false; // Too soon, reject attempt
+                return false;
             }
         }
 
-        return true; // Allowed
+        return true;
     }
     
     public Task<bool> ValidateJtiAsync(string jti)
@@ -94,8 +95,13 @@ public class SecurityService
         if (string.IsNullOrEmpty(clientIp))
             return;
 
-        var attempts = LoginAttempts.GetOrAdd(clientIp, (0, DateTime.UtcNow.AddMinutes(RateLimitWindowMinutes)));
-        LoginAttempts[clientIp] = (attempts.count + 1, attempts.resetTime);
+        var now = DateTime.UtcNow;
+
+        LoginAttempts.AddOrUpdate(
+            clientIp,
+            (1, now.AddMinutes(RateLimitWindowMinutes), now),
+            (_, existing) => (existing.count + 1, existing.resetTime, now)
+        );
     }
 
     public void ClearFailedAttempts(string clientIp)
@@ -112,4 +118,3 @@ public class SecurityService
     
     private static readonly ConcurrentDictionary<string, DateTime> ValidJtis = new();
 }
-

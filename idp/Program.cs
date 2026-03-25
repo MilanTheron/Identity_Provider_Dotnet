@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
@@ -28,6 +29,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     {
         options.RequireHttpsMetadata = true;
 
+        // Token
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ClockSkew = TimeSpan.FromSeconds(30),
@@ -47,6 +49,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             NameClaimType = JwtRegisteredClaimNames.Sub,
         };
 
+        // Token On event
         options.Events = new JwtBearerEvents
         {
             OnTokenValidated = async context =>
@@ -70,16 +73,62 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-builder.Services.AddAuthorization();
+// Policies
+builder.Services.AddAuthorization(options =>
+{
+    // Fallback: tous les endpoints nécessitent authentification par défaut
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+
+    // Policy pour rôles administrateurs
+    options.AddPolicy("AdminOnly", policy =>
+        policy.RequireRole("Admin")
+    );
+
+    // Policy pour utilisateurs authentifiés avec MFA activée
+    options.AddPolicy("RequireMfa", policy =>
+        policy.RequireAssertion(context =>
+            context.User.HasClaim(c =>
+                c.Type == "mfa" && c.Value == "true"
+            )
+        )
+    );
+
+    // Policy pour endpoints sensibles (modification de mot de passe, tokens)
+    options.AddPolicy("SensitiveOperation", policy =>
+        policy.RequireAuthenticatedUser()
+              .RequireClaim("mfa", "true")
+    );
+});
 
 var app = builder.Build();
+
+// FOR DEV ONLY, TO REMOVE LATER
+if (args.Contains("--cleanDB"))
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    // Completely delete the database
+    Console.WriteLine("Deleting database...");
+    await db.Database.EnsureDeletedAsync();
+
+    // Recreate database schema
+    Console.WriteLine("Recreating database...");
+    await db.Database.EnsureCreatedAsync();
+
+    Console.WriteLine("Database fully removed and recreated");
+    return; // stop app here
+}
+// FOR DEV ONLY, TO REMOVE LATER
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
 } else {
-    app.UseExceptionHandler("/Error"); // TODO
+    app.UseExceptionHandler("/Error");
     app.UseHsts();
 }
 
