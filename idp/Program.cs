@@ -1,5 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
@@ -21,13 +23,14 @@ builder.Services.AddScoped<BackupCodeService>();
 builder.Services.AddScoped<SecurityService>();
 
 var jwtKey = builder.Configuration["Jwt:Key"]
-             ?? throw new InvalidOperationException("Jwt:Key not configured");
+             ?? throw new InvalidOperationException("Jwt:Key not configured"); // rotate keys periodically or store them securely in Azure Key Vault, AWS KMS, etc.
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.RequireHttpsMetadata = true;
 
+        // Token
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ClockSkew = TimeSpan.FromSeconds(30),
@@ -47,11 +50,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             NameClaimType = JwtRegisteredClaimNames.Sub,
         };
 
+        // Token On event
         options.Events = new JwtBearerEvents
         {
             OnTokenValidated = async context =>
             {
-                var jti = context.Principal.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+                var jti = context.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
 
                 if (jti == null)
                 {
@@ -59,10 +63,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     return;
                 }
 
-                var securityService = context.HttpContext.RequestServices
-                    .GetRequiredService<SecurityService>();
-
-                if (!await securityService.ValidateJtiAsync(jti))
+                if (!await SecurityService.ValidateJtiAsync(jti))
                 {
                     context.Fail("Invalid token");
                 }
@@ -70,16 +71,72 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-builder.Services.AddAuthorization();
+// Policies
+builder.Services.AddAuthorization(options =>
+{
+    // Fallback: tous les endpoints nécessitent authentification par défaut
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+
+    // Policy pour rôles administrateurs
+    options.AddPolicy("AdminOnly", policy =>
+        policy.RequireRole("Admin")
+    );
+
+    // Policy pour utilisateurs authentifiés avec MFA activée
+    options.AddPolicy("RequireMfa", policy =>
+        policy.RequireAssertion(context =>
+            context.User.HasClaim(c =>
+                c.Type == "mfa" && c.Value == "true"
+            )
+        )
+    );
+
+    // Policy pour endpoints sensibles (modification de mot de passe, tokens)
+    options.AddPolicy("SensitiveOperation", policy =>
+        policy.RequireAuthenticatedUser()
+              .RequireClaim("mfa", "true")
+    );
+});
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("auth", opt =>
+    {
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.PermitLimit = 5;
+        opt.QueueLimit = 0;
+    });
+});
 
 var app = builder.Build();
+
+// FOR DEV ONLY, TO REMOVE LATER
+if (args.Contains("--cleanDB"))
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    // Completely delete the database
+    Console.WriteLine("Deleting database...");
+    await db.Database.EnsureDeletedAsync();
+
+    // Recreate database schema
+    Console.WriteLine("Recreating database...");
+    await db.Database.EnsureCreatedAsync();
+
+    Console.WriteLine("Database fully removed and recreated");
+    return; // stop app here
+}
+// FOR DEV ONLY, TO REMOVE LATER
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
 } else {
-    app.UseExceptionHandler("/Error"); // TODO
+    app.UseExceptionHandler("/Error");
     app.UseHsts();
 }
 
@@ -110,6 +167,7 @@ app.Use(async (context, next) =>
     await next();
 });
 
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

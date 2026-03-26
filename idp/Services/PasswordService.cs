@@ -25,7 +25,7 @@ public class PasswordService
         return $"{Convert.ToBase64String(salt)}:{hash}";
     }
     
-    public bool VerifyPassword(string password, string storedHash)
+    public static bool VerifyPassword(string password, string storedHash)
     {
         var parts = storedHash.Split(':');
         if (parts.Length != 2)
@@ -68,7 +68,7 @@ public class PasswordService
     }
 
     // Check if password has ever been in a breach using the Have I Been Pwned API
-    private async Task<bool> CheckHaveIBeenPwned(string password)
+    private static async Task<bool> CheckHaveIBeenPwned(string password)
     {
         // Hash password with SHA-1
         using var sha1 = SHA1.Create();
