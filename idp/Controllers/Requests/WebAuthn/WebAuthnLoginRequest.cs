@@ -2,5 +2,5 @@
 
 public class WebAuthnLoginRequest
 {
-    public required string Username { get; set; }
+    public string Username { get; set; } = null!;
 }

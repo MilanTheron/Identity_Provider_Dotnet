@@ -2,8 +2,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.AspNetCore.Authorization;
-using idp.Controllers.Requests;
+using Microsoft.AspNetCore.RateLimiting;
+using System.IdentityModel.Tokens.Jwt;
 using idp.Controllers.Requests.WebAuthn;
+using idp.Models;
 using idp.Services;
 using idp.Data;
 
@@ -15,79 +17,115 @@ public class WebAuthnController : ControllerBase
 {
     private readonly WebAuthnService _webAuthnService;
     private readonly AppDbContext _context;
-    
-    public WebAuthnController(AppDbContext context, WebAuthnService webAuthnService)
+    private readonly TokenService _tokenService;
+
+    public WebAuthnController(
+        AppDbContext context,
+        WebAuthnService webAuthnService,
+        TokenService tokenService)
     {
         _context = context;
         _webAuthnService = webAuthnService;
+        _tokenService = tokenService;
     }
 
     [Authorize]
+    [EnableRateLimiting("auth")]
     [HttpPost("webauthn/register/start")]
-    public async Task<IActionResult> StartWebAuthnRegister([FromBody] WebAuthnRegisterRequest request)
+    public async Task<IActionResult> StartWebAuthnRegister()
     {
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == request.Username);
+        var username = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+        if (username == null)
+            return Unauthorized();
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == username);
         if (user == null)
-            return BadRequest("User not found");
+            return Unauthorized();
 
         var options = _webAuthnService.StartRegistration(user.Username, user.Id);
+
         return Ok(options);
     }
     
     [Authorize]
+    [EnableRateLimiting("auth")]
     [HttpPost("webauthn/register/finish")]
     public async Task<IActionResult> FinishWebAuthnRegister([FromBody] WebAuthnRegisterFinishRequest request)
     {
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == request.Username);
+        var username = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+        if (username == null)
+            return Unauthorized();
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == username);
         if (user == null)
-            return BadRequest("User not found");
+            return Unauthorized();
 
-        var credential = await _webAuthnService.FinishRegistration(user.Id, request.ClientResponse);
-
-        return Ok(new
+        try
         {
-            credentialId = Convert.ToBase64String(credential.CredentialIdBytes),
-            message = "WebAuthn registration successful"
-        });
+            var credential = await _webAuthnService.FinishRegistration(user.Id, request.ClientResponse);
+
+            return Ok(new
+            {
+                credentialId = Convert.ToBase64String(credential.CredentialIdBytes),
+                message = "WebAuthn registration successful"
+            });
+        }
+        catch
+        {
+            return BadRequest("Registration failed");
+        }
     }
 
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     [HttpPost("webauthn/login/start")]
     public async Task<IActionResult> StartWebAuthnLogin([FromBody] WebAuthnLoginRequest request)
-    {
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == request.Username);
-        if (user == null)
-            return BadRequest("User not found");
-        
-        var creds = _context.WebAuthnCredentials
-            .Where(c => c.UserId == user.Id)
-            .ToList();
-        if (creds.Count == 0)
-            return BadRequest("No WebAuthn credentials registered for this user");
-        
-        var options = _webAuthnService.StartLogin(user.Id.ToString(), creds);
-        return Ok(options);
-    }
-
-    [AllowAnonymous]
-    [HttpPost("webauthn/login/finish")]
-    public async Task<IActionResult> FinishWebAuthnLogin([FromBody] WebAuthnLoginFinishRequest request)
     {
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.Username == request.Username);
 
         if (user == null)
-            return BadRequest("User not found");
+            return Ok(new { }); 
 
-        var credentialIdBytes = Base64UrlEncoder.DecodeBytes(request.ClientResponse.Id);
+        var creds = await _context.WebAuthnCredentials
+            .Where(c => c.UserId == user.Id)
+            .ToListAsync();
+
+        if (creds.Count == 0)
+            return Ok(new { });
+
+        var options = _webAuthnService.StartLogin(user.Id.ToString(), creds);
+
+        return Ok(options);
+    }
+
+    [AllowAnonymous]
+    [EnableRateLimiting("auth")]
+    [HttpPost("webauthn/login/finish")]
+    public async Task<IActionResult> FinishWebAuthnLogin([FromBody] WebAuthnLoginFinishRequest request)
+    {
+        byte[] credentialIdBytes;
+
+        try
+        {
+            credentialIdBytes = Base64UrlEncoder.DecodeBytes(request.ClientResponse.Id);
+        }
+        catch
+        {
+            return BadRequest("Invalid credential format");
+        }
 
         var storedCredential = await _context.WebAuthnCredentials
-            .FirstOrDefaultAsync(c =>
-                c.UserId == user.Id &&
-                c.CredentialIdBytes.SequenceEqual(credentialIdBytes));
+            .FirstOrDefaultAsync(c => c.CredentialIdBytes.SequenceEqual(credentialIdBytes));
 
         if (storedCredential == null)
-            return BadRequest("Credential not registered");
+            return Unauthorized("Authentication failed");
+
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.Id == storedCredential.UserId);
+
+        if (user == null)
+            return Unauthorized("Authentication failed");
 
         try
         {
@@ -98,13 +136,31 @@ public class WebAuthnController : ControllerBase
             );
 
             if (!success)
-                return Unauthorized();
+                return Unauthorized("Authentication failed");
 
-            return Ok(new { message = "Login successful" });
+            var accessToken = await _tokenService.GenerateJwtToken(user, true);
+            var refreshTokenValue = TokenService.GenerateRefreshToken();
+
+            var refreshToken = new RefreshToken
+            {
+                Token = _tokenService.HashToken(refreshTokenValue),
+                JwtId = Guid.NewGuid().ToString(),
+                UserId = user.Username,
+                ExpiryDate = DateTime.UtcNow.AddDays(7)
+            };
+
+            _context.Add(refreshToken);
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                AccessToken = accessToken,
+                RefreshToken = refreshTokenValue
+            });
         }
-        catch (Exception ex)
+        catch
         {
-            return BadRequest(ex.Message);
+            return Unauthorized("Authentication failed");
         }
     }
 }

@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using idp.Services;
 using idp.Data;
 using idp.Models;
@@ -23,6 +24,7 @@ public class TokenController : ControllerBase
     }
     
     [Authorize(Policy = "SensitiveOperation")]
+    [EnableRateLimiting("auth")]
     [HttpPost("token/refresh")]
     public async Task<IActionResult> Refresh([FromBody] RefreshRequest request)
     {
@@ -52,7 +54,7 @@ public class TokenController : ControllerBase
 
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == storedToken.UserId);
         if (user == null)
-            return BadRequest("User not found");
+            return BadRequest("Invalid username");
 
         // Revoke old token
         storedToken.IsRevoked = true;

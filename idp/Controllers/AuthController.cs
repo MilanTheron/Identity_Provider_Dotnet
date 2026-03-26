@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using System.IdentityModel.Tokens.Jwt;
 using OtpNet;
 using idp.Data;
@@ -17,19 +18,16 @@ public class AuthController : ControllerBase
     private readonly AppDbContext _context;
     private readonly PasswordService _passwordService;
     private readonly TokenService _tokenService;
-    private readonly BackupCodeService _backupCodeService;
-    private readonly SecurityService _securityService;
 
-    public AuthController(AppDbContext context, PasswordService passwordService, TokenService tokenService, BackupCodeService backupCodeService, SecurityService securityService)
+    public AuthController(AppDbContext context, PasswordService passwordService, TokenService tokenService)
     {
         _context = context;
         _passwordService = passwordService;
         _tokenService = tokenService;
-        _backupCodeService = backupCodeService;
-        _securityService = securityService;
     }
 
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
@@ -51,8 +49,9 @@ public class AuthController : ControllerBase
     
         return Ok("User registered");
     }
-    
+
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
@@ -60,28 +59,15 @@ public class AuthController : ControllerBase
         if (clientIp == null)
             return StatusCode(StatusCodes.Status500InternalServerError, "Unable to determine client IP");
 
-        // IP rate limiting: check too soon attempt
-        if (!_securityService.CanAttemptLogin(clientIp, out var waitTime))
-            return StatusCode(StatusCodes.Status429TooManyRequests, $"Please wait {waitTime?.TotalSeconds:F0} seconds before trying again.");
-
-        // Rate limiting check
-        if (_securityService.IsRateLimited(clientIp))
-            return StatusCode(StatusCodes.Status429TooManyRequests, "Too many login attempts. Please try again later.");
-
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == request.Username);
         if (user == null)
         {
-            SecurityService.RecordFailedAttempt(clientIp);
             return Unauthorized("Invalid username or password");
         }
 
-        // Check account lockout
-        if (user.LockoutEnd.HasValue && user.LockoutEnd > DateTime.UtcNow)
-            return Unauthorized("Account locked due to too many failed attempts");
-
         // Verify password
         if (!PasswordService.VerifyPassword(request.Password, user.PasswordHash))
-            return await FailLogin(user, clientIp, "Invalid username or password");
+            return BadRequest("Invalid username or password");
 
         // Password correct, now check MFA if enabled
         bool mfaVerified = false;
@@ -92,17 +78,13 @@ public class AuthController : ControllerBase
                 return Unauthorized("MFA required");
 
             if (!ValidateMfa(request, user))
-                return await FailLogin(user, clientIp, "Invalid MFA code");
+                return BadRequest("Invalid MFA code");
 
             mfaVerified = true;
         }
         else
             mfaVerified = true;
 
-        // Reset failed attempts and lockout on successful login
-        user.FailedLoginAttempts = 0;
-        user.LockoutEnd = null;
-        _securityService.ClearFailedAttempts(clientIp); // clear IP record on successful login
         await _context.SaveChangesAsync();
 
         // Generate tokens
@@ -122,8 +104,9 @@ public class AuthController : ControllerBase
 
         return Ok(new { AccessToken = accessToken, RefreshToken = refreshTokenValue });
     }
-    
+
     [Authorize]
+    [EnableRateLimiting("auth")]
     [HttpPost("logout")]
     public async Task<IActionResult> Logout([FromBody] LogoutRequest request)
     {
@@ -140,6 +123,7 @@ public class AuthController : ControllerBase
         return Ok("Logged out");
     }
 
+    [EnableRateLimiting("auth")]
     [Authorize(Policy = "SensitiveOperation")]
     [HttpPost("change-password")]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
@@ -210,22 +194,5 @@ public class AuthController : ControllerBase
         }
 
         return false;
-    }
-    
-    private Task<IActionResult> FailLogin(User user, string clientIp, string message)
-    {
-        HandleFailedAttempt(user, clientIp);
-        return Task.FromResult<IActionResult>(Unauthorized(message));
-    }
-    
-    private void HandleFailedAttempt(User user, string clientIp)
-    {
-        user.FailedLoginAttempts++;
-        if (user.FailedLoginAttempts >= SecurityService.GetFailedAttemptsThreshold())
-        {
-            user.LockoutEnd = DateTime.UtcNow.Add(SecurityService.GetLockoutDuration());
-        }
-        _context.SaveChangesAsync();
-        SecurityService.RecordFailedAttempt(clientIp);
     }
 }

@@ -60,7 +60,7 @@
 - ✅ Implement PKCE verification
 - ✅ Store authorization codes securely (short-lived, one-time use)
 
-**Status**: Not started
+**Files**: `TokenService.cs`, `AuthController.cs`, `TokenController.cs`
 
 ---
 
@@ -73,12 +73,19 @@
 
 ### Implementation Status
 - ✅ Issue ID tokens (JWT with user identity claims)
-- ❌ Add /.well-known/openid-configuration endpoint
-- ❌ Add /.well-known/jwks.json endpoint
+- ✅ Add /.well-known/openid-configuration endpoint
+- ✅ Add /.well-known/jwks.json endpoint
 - ✅ Include proper claims (sub, email, etc.)
-- ❌ Sign tokens using asymmetric keys (RSA)
+- ✅ Sign tokens using asymmetric keys (RSA)
 
-**Status**: Not started
+#### Setup keys: (might want to use cloudflare/Azure/AWS for this in production, but for local testing we can generate our own keys)
+```bash
+mkdir -p keys
+openssl genpkey -algorithm RSA -out keys/private.pem -pkeyopt rsa_keygen_bits:2048
+openssl rsa -pubout -in keys/private.pem -out keys/public.pem
+```
+
+**Files**: `TokenService.cs`, `SecurityService.cs`, `TokenController.cs`, `WellKnownController.cs`
 
 ---
 
@@ -328,3 +335,32 @@ curl -k https://127.0.0.1:5001/api/auth/change-password \
   -H "Authorization: Bearer #TOKEN" \
   -d '{"OldPassword":"Test123!Strong","NewPassword":"StrongestEverEverEver123123123!!!!@@@@"}'
 ```
+
+---
+
+### Endpoint List: 
+**Command: (command: grep -rnE "^\s\*\[Route|^\s\*\[Http(Get|Post|Put|Delete|Patch)" .)**
+- "register"
+- "login"
+- "logout"
+- "change-password"
+
+- "/Error"
+- "/Error/{statusCode}"
+
+- "me"
+
+- "authorize"
+-  "token"
+
+- "token/refresh"
+
+- "setup-totp"
+
+- "/webauthn/register/start"
+- "/webauthn/register/finish"
+- "/webauthn/login/start"
+- "/webauthn/login/finish"
+
+- "openid-configuration"
+- "jwks"

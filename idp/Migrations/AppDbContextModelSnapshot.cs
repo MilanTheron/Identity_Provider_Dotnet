@@ -46,12 +46,12 @@ namespace idp.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("Used")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("UserId")
                         .IsRequired()
                         .HasColumnType("TEXT");
-
-                    b.Property<bool>("used")
-                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -111,14 +111,8 @@ namespace idp.Migrations
                     b.Property<string>("Email")
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("FailedLoginAttempts")
-                        .HasColumnType("INTEGER");
-
                     b.Property<bool>("IsTotpEnabled")
                         .HasColumnType("INTEGER");
-
-                    b.Property<DateTime?>("LockoutEnd")
-                        .HasColumnType("TEXT");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()

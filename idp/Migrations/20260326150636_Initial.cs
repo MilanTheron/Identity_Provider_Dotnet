@@ -6,15 +6,11 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace idp.Migrations
 {
     /// <inheritdoc />
-    public partial class AddRefreshToken : Migration
+    public partial class Initial : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "Phone",
-                table: "Users");
-
             migrationBuilder.CreateTable(
                 name: "AuthorizationCodes",
                 columns: table => new
@@ -26,9 +22,9 @@ namespace idp.Migrations
                     RedirectUri = table.Column<string>(type: "TEXT", nullable: false),
                     CodeChallenge = table.Column<string>(type: "TEXT", nullable: false),
                     CodeChallengeMethod = table.Column<string>(type: "TEXT", nullable: false),
-                    ExpiresAt = table.Column<DateTime>(type: "TEXT", nullable: false),
                     UserId = table.Column<string>(type: "TEXT", nullable: false),
-                    used = table.Column<bool>(type: "INTEGER", nullable: false)
+                    Used = table.Column<bool>(type: "INTEGER", nullable: false),
+                    ExpiresAt = table.Column<DateTime>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -54,6 +50,24 @@ namespace idp.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_RefreshTokens", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Users",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    Username = table.Column<string>(type: "TEXT", nullable: false),
+                    Email = table.Column<string>(type: "TEXT", nullable: true),
+                    PasswordHash = table.Column<string>(type: "TEXT", nullable: false),
+                    TotpSecret = table.Column<string>(type: "TEXT", nullable: true),
+                    IsTotpEnabled = table.Column<bool>(type: "INTEGER", nullable: false),
+                    BackupCodes = table.Column<string>(type: "TEXT", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Users", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -96,11 +110,8 @@ namespace idp.Migrations
             migrationBuilder.DropTable(
                 name: "WebAuthnCredentials");
 
-            migrationBuilder.AddColumn<string>(
-                name: "Phone",
-                table: "Users",
-                type: "TEXT",
-                nullable: true);
+            migrationBuilder.DropTable(
+                name: "Users");
         }
     }
 }

@@ -7,9 +7,9 @@ public static class FidoConfig
     {
         return new Fido2(new Fido2Configuration
         {
-            ServerDomain = config["Fido:Domain"], // Change with actual domain name
+            ServerDomain = config["Fido:Domain"],
             ServerName = "Identity_Provider_Dotnet",
-            Origins = new HashSet<string> { config["Fido:Origin"] }
+            Origins = config.GetSection("Fido:Origins").Get<HashSet<string>>()
         });
     }
 }

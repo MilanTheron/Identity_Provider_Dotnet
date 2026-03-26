@@ -77,7 +77,7 @@ read -p "Enter TOTP code from your authenticator: " TOTP_CODE
 echo "---- 4. Login with MFA ----"
 LOGIN_MFA_RESPONSE=$(curl -sk $BASE_URL/api/auth/login \
   -H "Content-Type: application/json" \
-  -d "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD\",\"totpCode\":\"$TOTP_CODE\"}")
+  -d "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD\",\"totpCode\":\"$TOTP_CODE\",\"BackupCode\":\"$BACKUP_CODES\"}")
 
 echo "$LOGIN_MFA_RESPONSE"
 

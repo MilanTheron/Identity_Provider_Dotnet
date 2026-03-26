@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
@@ -62,10 +63,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     return;
                 }
 
-                var securityService = context.HttpContext.RequestServices
-                    .GetRequiredService<SecurityService>();
-
-                if (!await securityService.ValidateJtiAsync(jti))
+                if (!await SecurityService.ValidateJtiAsync(jti))
                 {
                     context.Fail("Invalid token");
                 }
@@ -100,6 +98,16 @@ builder.Services.AddAuthorization(options =>
         policy.RequireAuthenticatedUser()
               .RequireClaim("mfa", "true")
     );
+});
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("auth", opt =>
+    {
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.PermitLimit = 5;
+        opt.QueueLimit = 0;
+    });
 });
 
 var app = builder.Build();
@@ -159,6 +167,7 @@ app.Use(async (context, next) =>
     await next();
 });
 
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

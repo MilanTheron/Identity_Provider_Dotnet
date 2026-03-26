@@ -1,5 +1,4 @@
 ﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 
 namespace idp.Controllers
@@ -12,9 +11,6 @@ namespace idp.Controllers
         [Route("/Error")]
         public IActionResult HandleError()
         {
-            var contextFeature = HttpContext.Features.Get<IExceptionHandlerFeature>();
-            var exception = contextFeature?.Error;
-
             return Problem(
                 title: "An unexpected error occurred.",
                 statusCode: StatusCodes.Status500InternalServerError

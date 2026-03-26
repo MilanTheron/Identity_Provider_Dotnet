@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using idp.Controllers.Requests;
 using idp.Services;
 using idp.Data;
@@ -12,35 +13,31 @@ namespace idp.Controllers;
 [Route("api/[controller]")]
 public class TotpController : ControllerBase
 {
-    private readonly BackupCodeService _backupCodeService;
     private readonly AppDbContext _context;
     
-    public TotpController(AppDbContext context, BackupCodeService backupCodeService)
+    public TotpController(AppDbContext context)
     {
         _context = context;
-        _backupCodeService = backupCodeService;
     }
     
     [Authorize]
+    [EnableRateLimiting("auth")]
     [HttpPost("setup-totp")]
     public async Task<IActionResult> SetupTotp([FromBody] SetupTotpRequest request)
     {
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == request.Username);
         if (user == null)
-            return NotFound();
+            return BadRequest("Invalid username");
         
         if (user.IsTotpEnabled && !string.IsNullOrEmpty(user.TotpSecret))
-        {
             return BadRequest("TOTP already enabled");
-        }
 
         var secret = KeyGeneration.GenerateRandomKey(20);
         user.TotpSecret = Base32Encoding.ToString(secret);
         user.IsTotpEnabled = true;
 
-        // Generate backup codes
         var plainCodes = BackupCodeService.GenerateBackupCodes();
-        user.BackupCodes = plainCodes.Select(code => BackupCodeService.HashBackupCode(code)).ToList(); // Save codes(hash) into user
+        user.BackupCodes = plainCodes.Select(code => BackupCodeService.HashBackupCode(code)).ToList();
 
         await _context.SaveChangesAsync();
 

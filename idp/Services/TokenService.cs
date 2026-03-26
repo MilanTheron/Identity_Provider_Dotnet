@@ -1,8 +1,8 @@
 ﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
-using System.Text;
 using Microsoft.IdentityModel.Tokens;
+using System.Text;
 using idp.Models;
 
 namespace idp.Services;
@@ -10,12 +10,10 @@ namespace idp.Services;
 public class TokenService
 {
     private readonly IConfiguration _configuration;
-    private readonly SecurityService _securityService;
 
-    public TokenService(IConfiguration configuration, SecurityService securityService)
+    public TokenService(IConfiguration configuration)
     {
         _configuration = configuration;
-        _securityService = securityService;
     }
 
     public async Task<string> GenerateJwtToken(User user, bool mfaVerified)
@@ -34,11 +32,14 @@ public class TokenService
             new Claim("mfa", mfaVerified ? "true" : "false")
         };
 
-        var keyString = _configuration["Jwt:Key"] 
-                        ?? throw new InvalidOperationException("Jwt:Key not configured");
+        var rsa = SecurityService.Rsa;
+        var keyId = _configuration["Jwt:KeyId"];
+        var key = new RsaSecurityKey(rsa)
+        {
+            KeyId = keyId
+        };
 
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(keyString));
-        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+        var creds = new SigningCredentials(key, SecurityAlgorithms.RsaSha256);
         var expiry = now.AddMinutes(30);
         
         var token = new JwtSecurityToken(
@@ -49,7 +50,7 @@ public class TokenService
             expires: expiry,
             signingCredentials: creds);
         
-        await _securityService.StoreJtiAsync(jti, expiry);
+        await SecurityService.StoreJtiAsync(jti, expiry);
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }

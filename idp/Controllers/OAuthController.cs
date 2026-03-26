@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Cryptography;
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
@@ -25,6 +26,7 @@ public class OAuthController : Controller
     }
 
     [Authorize]
+    [EnableRateLimiting("auth")]
     [HttpGet("authorize")]
     public async Task<IActionResult> Authorize([FromQuery] AuthorizeRequest request)
     {
@@ -64,7 +66,7 @@ public class OAuthController : Controller
             CodeChallengeMethod = request.CodeChallengeMethod,
             ExpiresAt = DateTime.UtcNow.AddMinutes(5),
             Used = false,
-            UserId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+            UserId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value ?? throw new Exception("User ID claim missing")
         };
 
         _context.AuthorizationCodes.Add(authCode);
@@ -77,6 +79,7 @@ public class OAuthController : Controller
     }
 
     [Authorize(Policy = "SensitiveOperation")]
+    [EnableRateLimiting("auth")]
     [HttpPost("token")]
     public async Task<IActionResult> Token([FromForm] TokenRequest request)
     {
