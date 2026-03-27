@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Cryptography;
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Text;
 using idp.Data;
 using idp.Models;
@@ -31,32 +32,43 @@ public class OAuthController : Controller
     public async Task<IActionResult> Authorize([FromQuery] AuthorizeRequest request)
     {
         if (request.ResponseType != "code")
-            return BadRequest("invalid_response_type");
+            return BadRequest(new { error = "invalid_response_type" });
 
         var client = await _context.Set<OAuthClient>()
             .FirstOrDefaultAsync(c => c.ClientId == request.ClientId);
 
         if (client == null)
-            return BadRequest("invalid_client");
+            return BadRequest(new { error = "invalid_client" });
 
-        if (!client.RedirectUris.Any(uri => uri.Equals(request.RedirectUri, StringComparison.Ordinal)))
-            return BadRequest("invalid_redirect_uri");
-        
-        if (string.IsNullOrEmpty(request.State))
-            return BadRequest("invalid_state");
+        if (!client.RedirectUris.Any(uri => 
+            uri.Equals(request.RedirectUri, StringComparison.Ordinal)))
+        {
+            return BadRequest(new { error = "invalid_redirect_uri" });
+        }
 
-        // enforce PKCE if required
+        if (string.IsNullOrWhiteSpace(request.State))
+            return BadRequest(new { error = "invalid_state" });
+
+        foreach (var claim in User.Claims)
+            Console.WriteLine($"{claim.Type}: {claim.Value}");
+
+        var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+                     ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (string.IsNullOrEmpty(userId))
+            return BadRequest(new { error = "invalid_user_id" });
+
         if (client.RequirePkce)
         {
             if (string.IsNullOrEmpty(request.CodeChallenge) ||
                 request.CodeChallengeMethod != "S256")
             {
-                return BadRequest("invalid_pkce");
+                return BadRequest(new { error = "invalid_pkce" });
             }
         }
 
         var code = Guid.NewGuid().ToString("N");
-        
+
         var authCode = new AuthorizationCode
         {
             Code = code,
@@ -66,13 +78,12 @@ public class OAuthController : Controller
             CodeChallengeMethod = request.CodeChallengeMethod,
             ExpiresAt = DateTime.UtcNow.AddMinutes(5),
             Used = false,
-            UserId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value ?? throw new Exception("User ID claim missing")
+            UserId = userId
         };
 
         _context.AuthorizationCodes.Add(authCode);
         await _context.SaveChangesAsync();
 
-        // redirect back with code + state
         var redirectUrl = $"{request.RedirectUri}?code={code}&state={request.State}";
 
         return Redirect(redirectUrl);
@@ -81,7 +92,7 @@ public class OAuthController : Controller
     [Authorize(Policy = "SensitiveOperation")]
     [EnableRateLimiting("auth")]
     [HttpPost("token")]
-    public async Task<IActionResult> Token([FromForm] TokenRequest request)
+    public async Task<IActionResult> Token([FromBody] TokenRequest request)
     {
         if (request.GrantType != "authorization_code")
             return BadRequest("unsupported_grant_type");
@@ -146,10 +157,10 @@ public class OAuthController : Controller
 
         return Ok(new
         {
-            access_token = accessToken,
-            token_type = "Bearer",
+            AccessToken = accessToken,
+            TokenType = "Bearer",
             RefreshToken = refreshTokenValue,
-            expires_in = 1800
+            ExpiresIn = 1800
         });
     }
 }

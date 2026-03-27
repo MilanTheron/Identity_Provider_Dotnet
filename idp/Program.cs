@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
-using System.Text;
+using System.Security.Cryptography;
 using idp.Data;
 using idp.Services;
 
@@ -25,48 +25,42 @@ builder.Services.AddScoped<SecurityService>();
 var jwtKey = builder.Configuration["Jwt:Key"]
              ?? throw new InvalidOperationException("Jwt:Key not configured"); // rotate keys periodically or store them securely in Azure Key Vault, AWS KMS, etc.
 
+// Load the public key
+var rsa = RSA.Create();
+rsa.ImportFromPem(File.ReadAllText(builder.Configuration["Rsa:PublicKeyPath"]));
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.RequireHttpsMetadata = true;
-
-        // Token
+        
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ClockSkew = TimeSpan.FromSeconds(30),
-
             ValidateIssuer = true,
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
-
             ValidateAudience = true,
             ValidAudience = builder.Configuration["Jwt:Audience"],
-
             ValidateLifetime = true,
             RequireExpirationTime = true,
-
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
-
-            NameClaimType = JwtRegisteredClaimNames.Sub,
+            IssuerSigningKey = new RsaSecurityKey(rsa),
+            NameClaimType = JwtRegisteredClaimNames.Sub
         };
 
-        // Token On event
         options.Events = new JwtBearerEvents
         {
+            OnAuthenticationFailed = context =>
+            {
+                Console.WriteLine("Authentication failed:");
+                Console.WriteLine((object)context.Exception);
+                return Task.CompletedTask;
+            },
             OnTokenValidated = async context =>
             {
                 var jti = context.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
-
-                if (jti == null)
-                {
-                    context.Fail("Missing jti");
-                    return;
-                }
-
-                if (!await SecurityService.ValidateJtiAsync(jti))
-                {
+                if (jti == null || !await SecurityService.ValidateJtiAsync(jti))
                     context.Fail("Invalid token");
-                }
             }
         };
     });
@@ -166,6 +160,23 @@ app.Use(async (context, next) =>
 
     await next();
 });
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    if (!db.OAuthClients.Any(c => c.ClientId == "myclient"))
+    {
+        db.OAuthClients.Add(new OAuthClient
+        {
+            ClientId = "myclient",
+            RedirectUris = new List<string> { "https://localhost:5002/callback" },
+            RequirePkce = true
+        });
+        db.SaveChanges();
+        Console.WriteLine("Seeded default OAuth client: myclient");
+    }
+}
 
 app.UseRateLimiter();
 app.UseAuthentication();

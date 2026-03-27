@@ -33,9 +33,9 @@
 - Token replay attacks
 
 ### Implementation Status
-- ✅ Use short-lived access tokens (30 minutes)
-- ✅ Implement refresh token rotation (new token per use)
-- ✅ Store refresh tokens securely (hashed if possible)
+- ✅ Use short-lived access tokens
+- ✅ Implement refresh token rotation
+- ✅ Store refresh tokens securely
 - ✅ Detect refresh token reuse and revoke session chain
 - ✅ Include proper claims validation in all consumers
 - ✅ Store (username, key) tuples
@@ -185,12 +185,12 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 - ✅ Rate limiting per IP (10 attempts per minute)
 - ✅ Track failed login attempts per user
 - ✅ Account lockout (5 failed attempts → 15 min lockout)
-- ❌ Progressive difficulty (exponential backoff)
+- ✅ Progressive difficulty (exponential backoff)
 - ✅ Reset counter on successful login
 - ❌ Combine with CAPTCHA - *Not implemented*
-- ⏳ Distributed rate limiting - *In-memory only, not Redis*
+- ✅ Distributed rate limiting
 
-**Files**: `SecurityService.cs`, `AuthController.cs`
+**Files**: `SecurityService.cs`, `AuthController.cs`, `Program.cs`
 
 ---
 
@@ -205,7 +205,7 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 - ✅ Maintain refresh token store
 - ✅ Revoke tokens on logout
 - ✅ Revoke tokens on password change
-- ✅ Detect and handle token reuse - *IsRevoked flag*
+- ✅ Detect and handle token reuse
 - ⏳ Token blacklist - *Uses revocation flag instead*
 - ❌ Distributed cache support (Redis)
 

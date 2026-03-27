@@ -32,6 +32,22 @@ namespace idp.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "OAuthClients",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    ClientId = table.Column<string>(type: "TEXT", nullable: false),
+                    RedirectUrisJson = table.Column<string>(type: "TEXT", nullable: false),
+                    RequirePkce = table.Column<bool>(type: "INTEGER", nullable: false),
+                    RedirectUris = table.Column<string>(type: "TEXT", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_OAuthClients", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "RefreshTokens",
                 columns: table => new
                 {
@@ -103,6 +119,9 @@ namespace idp.Migrations
         {
             migrationBuilder.DropTable(
                 name: "AuthorizationCodes");
+
+            migrationBuilder.DropTable(
+                name: "OAuthClients");
 
             migrationBuilder.DropTable(
                 name: "RefreshTokens");

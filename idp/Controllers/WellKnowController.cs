@@ -27,7 +27,6 @@ public class WellKnownController : ControllerBase
             authorization_endpoint = $"{issuer}/api/oauth/authorize",
             token_endpoint = $"{issuer}/api/oauth/token",
             
-            
             webAuthnRegisterStart_endpoint = $"{issuer}api/webauthn/register/start",
             webAuthnRegisterFinish_endpoint = $"{issuer}api/webauthn/register/finish",
             webAuthnLoginStart_endpoint = $"{issuer}api/webauthn/login/start",

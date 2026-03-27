@@ -11,7 +11,7 @@ using idp.Data;
 namespace idp.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260326150636_Initial")]
+    [Migration("20260327090449_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -19,6 +19,32 @@ namespace idp.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.0");
+
+            modelBuilder.Entity("OAuthClient", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ClientId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RedirectUris")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RedirectUrisJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("RequirePkce")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("OAuthClients");
+                });
 
             modelBuilder.Entity("idp.Models.AuthorizationCode", b =>
                 {
