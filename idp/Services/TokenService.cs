@@ -16,20 +16,21 @@ public class TokenService
         _configuration = configuration;
     }
 
-    public async Task<string> GenerateJwtToken(User user, bool mfaVerified)
+    public async Task<(string token, string jti)> GenerateJwtToken(User user, bool mfaVerified)
     {
-        var jti = Guid.NewGuid().ToString();
+        var jti = user.Id.ToString();
 
         var now = DateTime.UtcNow;
 
         var claims = new List<Claim>
         {
-            new Claim(JwtRegisteredClaimNames.Sub, user.Username),
+            new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()), // user identity
             new Claim(JwtRegisteredClaimNames.Jti, jti),
+            new Claim("username", user.Username),
+            new Claim("mfa", mfaVerified ? "true" : "false"),
             new Claim(JwtRegisteredClaimNames.Iat,
                 DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
-                ClaimValueTypes.Integer64),
-            new Claim("mfa", mfaVerified ? "true" : "false")
+                ClaimValueTypes.Integer64)
         };
 
         var rsa = SecurityService.Rsa;
@@ -41,7 +42,7 @@ public class TokenService
 
         var creds = new SigningCredentials(key, SecurityAlgorithms.RsaSha256);
         var expiry = now.AddMinutes(30);
-        
+
         var token = new JwtSecurityToken(
             issuer: _configuration["Jwt:Issuer"],
             audience: _configuration["Jwt:Audience"],
@@ -52,7 +53,7 @@ public class TokenService
         
         await SecurityService.StoreJtiAsync(jti, expiry);
 
-        return new JwtSecurityTokenHandler().WriteToken(token);
+        return (new JwtSecurityTokenHandler().WriteToken(token), jti);
     }
 
     public static string GenerateRefreshToken()
@@ -63,11 +64,10 @@ public class TokenService
         return Convert.ToBase64String(randomNumber);
     }
     
-    public string HashToken(string token)
+    public static string HashToken(string token)
     {
         using var sha256 = SHA256.Create();
         var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(token));
         return Convert.ToBase64String(bytes);
     }
 }
-

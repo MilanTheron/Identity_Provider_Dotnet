@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Cryptography;
 using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
 using System.Text;
 using idp.Data;
 using idp.Models;
@@ -26,7 +25,7 @@ public class OAuthController : Controller
         _tokenService = tokenService;
     }
 
-    [Authorize]
+    [Authorize(Policy = "SensitiveOperation")]
     [EnableRateLimiting("auth")]
     [HttpGet("authorize")]
     public async Task<IActionResult> Authorize([FromQuery] AuthorizeRequest request)
@@ -40,31 +39,20 @@ public class OAuthController : Controller
         if (client == null)
             return BadRequest(new { error = "invalid_client" });
 
-        if (!client.RedirectUris.Any(uri => 
-            uri.Equals(request.RedirectUri, StringComparison.Ordinal)))
-        {
+        if (!client.RedirectUris.Any(uri => uri.Equals(request.RedirectUri, StringComparison.Ordinal)))
             return BadRequest(new { error = "invalid_redirect_uri" });
-        }
 
         if (string.IsNullOrWhiteSpace(request.State))
             return BadRequest(new { error = "invalid_state" });
-
-        foreach (var claim in User.Claims)
-            Console.WriteLine($"{claim.Type}: {claim.Value}");
-
-        var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
-                     ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
+        
+        var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
         if (string.IsNullOrEmpty(userId))
             return BadRequest(new { error = "invalid_user_id" });
 
-        if (client.RequirePkce)
+        if (string.IsNullOrEmpty(request.CodeChallenge) ||
+            request.CodeChallengeMethod != "S256")
         {
-            if (string.IsNullOrEmpty(request.CodeChallenge) ||
-                request.CodeChallengeMethod != "S256")
-            {
-                return BadRequest(new { error = "invalid_pkce" });
-            }
+            return BadRequest(new { error = "invalid_pkce" });
         }
 
         var code = Guid.NewGuid().ToString("N");
@@ -89,7 +77,7 @@ public class OAuthController : Controller
         return Redirect(redirectUrl);
     }
 
-    [Authorize(Policy = "SensitiveOperation")]
+    [AllowAnonymous]
     [EnableRateLimiting("auth")]
     [HttpPost("token")]
     public async Task<IActionResult> Token([FromBody] TokenRequest request)
@@ -99,7 +87,7 @@ public class OAuthController : Controller
 
         var client = await _context.Set<OAuthClient>()
             .FirstOrDefaultAsync(c => c.ClientId == request.ClientId);
-
+        
         if (client == null)
             return BadRequest("invalid_client");
 
@@ -116,43 +104,44 @@ public class OAuthController : Controller
             return BadRequest("invalid_grant");
 
         // PKCE
-        if (!string.IsNullOrEmpty(authCode.CodeChallenge))
-        {
-            if (string.IsNullOrEmpty(request.CodeVerifier))
-                return BadRequest("invalid_grant");
-
-            var hashed = Convert.ToBase64String(
-                    SHA256.HashData(Encoding.ASCII.GetBytes(request.CodeVerifier)))
-                .TrimEnd('=')
-                .Replace('+', '-')
-                .Replace('/', '_');
-
-            if (hashed != authCode.CodeChallenge)
-                return BadRequest("invalid_grant");
-        }
-
-        var user = await _context.Users
-            .FirstOrDefaultAsync(u => u.Username == authCode.UserId);
-
-        if (user == null)
+        if (authCode.CodeChallengeMethod != "S256")
             return BadRequest("invalid_grant");
+
+        if (string.IsNullOrEmpty(request.CodeVerifier))
+            return BadRequest("invalid_grant");
+
+        var hashed = Convert.ToBase64String(
+                SHA256.HashData(Encoding.ASCII.GetBytes(request.CodeVerifier)))
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+
+        if (!CryptographicOperations.FixedTimeEquals(
+                Encoding.ASCII.GetBytes(hashed),
+                Encoding.ASCII.GetBytes(authCode.CodeChallenge!)))
+        {
+            return BadRequest("invalid_grant");
+        }
+        
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.Id.ToString() == authCode.UserId);
+        if (user == null)
+            return NotFound();
 
         authCode.Used = true;
 
-        var accessToken = await _tokenService.GenerateJwtToken(user, true);
+        var (accessToken, jti) = await _tokenService.GenerateJwtToken(user, true);
         var refreshTokenValue = TokenService.GenerateRefreshToken();
 
         var refreshToken = new RefreshToken
         {
-            Token = _tokenService.HashToken(refreshTokenValue), // Store hashed version
-            JwtId = Guid.NewGuid().ToString(),
-            UserId = user.Username,
+            Token = TokenService.HashToken(refreshTokenValue), // Store hashed version
+            JwtId = jti,
+            UserId = user.Id.ToString(),
             ExpiryDate = DateTime.UtcNow.AddDays(7)
         };
         
         _context.Add(refreshToken);
-        await _context.SaveChangesAsync();
-
         await _context.SaveChangesAsync();
 
         return Ok(new

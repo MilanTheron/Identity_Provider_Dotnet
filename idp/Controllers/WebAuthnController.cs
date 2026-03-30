@@ -34,15 +34,15 @@ public class WebAuthnController : ControllerBase
     [HttpPost("webauthn/register/start")]
     public async Task<IActionResult> StartWebAuthnRegister()
     {
-        var username = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
-        if (username == null)
+        var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+        if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == username);
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
         if (user == null)
-            return Unauthorized();
+            return NotFound();
 
-        var options = _webAuthnService.StartRegistration(user.Username, user.Id);
+        var options = _webAuthnService.StartRegistration(user.Id, user.Username);
 
         return Ok(options);
     }
@@ -52,13 +52,13 @@ public class WebAuthnController : ControllerBase
     [HttpPost("webauthn/register/finish")]
     public async Task<IActionResult> FinishWebAuthnRegister([FromBody] WebAuthnRegisterFinishRequest request)
     {
-        var username = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
-        if (username == null)
+        var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+        if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == username);
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
         if (user == null)
-            return Unauthorized();
+            return NotFound();
 
         try
         {
@@ -83,9 +83,8 @@ public class WebAuthnController : ControllerBase
     {
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.Username == request.Username);
-
         if (user == null)
-            return Ok(new { }); 
+            return NotFound();
 
         var creds = await _context.WebAuthnCredentials
             .Where(c => c.UserId == user.Id)
@@ -94,7 +93,7 @@ public class WebAuthnController : ControllerBase
         if (creds.Count == 0)
             return Ok(new { });
 
-        var options = _webAuthnService.StartLogin(user.Id.ToString(), creds);
+        var options = _webAuthnService.StartLogin(user.Id, creds);
 
         return Ok(options);
     }
@@ -138,14 +137,14 @@ public class WebAuthnController : ControllerBase
             if (!success)
                 return Unauthorized("Authentication failed");
 
-            var accessToken = await _tokenService.GenerateJwtToken(user, true);
+            var (accessToken, jti) = await _tokenService.GenerateJwtToken(user, true);
             var refreshTokenValue = TokenService.GenerateRefreshToken();
 
             var refreshToken = new RefreshToken
             {
-                Token = _tokenService.HashToken(refreshTokenValue),
-                JwtId = Guid.NewGuid().ToString(),
-                UserId = user.Username,
+                Token = TokenService.HashToken(refreshTokenValue),
+                JwtId = jti,
+                UserId = user.Id.ToString(),
                 ExpiryDate = DateTime.UtcNow.AddDays(7)
             };
 

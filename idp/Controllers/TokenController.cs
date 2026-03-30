@@ -2,11 +2,12 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
+using System.Security.Cryptography;
+using System.IdentityModel.Tokens.Jwt;
+using System.Text;
 using idp.Services;
 using idp.Data;
 using idp.Models;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace idp.Controllers;
 
@@ -23,53 +24,46 @@ public class TokenController : ControllerBase
         _tokenService = tokenService;
     }
     
-    [Authorize(Policy = "SensitiveOperation")]
+    [AllowAnonymous]
     [EnableRateLimiting("auth")]
     [HttpPost("token/refresh")]
     public async Task<IActionResult> Refresh([FromBody] RefreshRequest request)
     {
         if (string.IsNullOrEmpty(request.RefreshToken))
             return BadRequest("Refresh token is required");
-        
-        var candidateTokens = await _context.Set<RefreshToken>()
-            .Where(rt => !rt.IsRevoked && rt.ExpiryDate >= DateTime.UtcNow)
-            .ToListAsync();
-        
-        RefreshToken? storedToken = null;
-        var requestBytes = Encoding.UTF8.GetBytes(request.RefreshToken);
 
-        // Constant-time comparison
-        foreach (var token in candidateTokens)
-        {
-            var tokenBytes = Encoding.UTF8.GetBytes(token.Token);
-            if (CryptographicOperations.FixedTimeEquals(tokenBytes, requestBytes))
-            {
-                storedToken = token;
-                break;
-            }
-        }
-        
-        if (storedToken == null || storedToken.IsRevoked || storedToken.ExpiryDate < DateTime.UtcNow)
+        var requestHash = TokenService.HashToken(request.RefreshToken);
+
+        var storedToken = await _context.RefreshTokens
+            .FirstOrDefaultAsync(rt =>
+                rt.Token == requestHash &&
+                !rt.IsRevoked &&
+                rt.ExpiryDate >= DateTime.UtcNow);
+
+        if (storedToken == null)
             return Unauthorized("Invalid refresh token");
 
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == storedToken.UserId);
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.Id.ToString() == storedToken.UserId);
+
         if (user == null)
-            return BadRequest("Invalid username");
+            return NotFound();
 
         // Revoke old token
         storedToken.IsRevoked = true;
 
         // Generate new tokens
-        var newAccessToken = _tokenService.GenerateJwtToken(user, true);
+        var (newAccessToken, newJti) = await _tokenService.GenerateJwtToken(user, true);
         var newRefreshTokenValue = TokenService.GenerateRefreshToken();
 
         var newRefreshToken = new RefreshToken
         {
-            Token = _tokenService.HashToken(newRefreshTokenValue), // Store hashed version
-            JwtId = Guid.NewGuid().ToString(),
-            UserId = user.Username,
+            Token = TokenService.HashToken(newRefreshTokenValue),
+            JwtId = newJti,
+            UserId = user.Id.ToString(),
             ExpiryDate = DateTime.UtcNow.AddDays(7)
         };
+
         _context.Add(newRefreshToken);
         await _context.SaveChangesAsync();
 

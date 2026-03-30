@@ -23,7 +23,7 @@ public class WebAuthnService
     }
 
     // REGISTRATION
-    public CredentialCreateOptions StartRegistration(string username, int userId)
+    public CredentialCreateOptions StartRegistration(Guid userId, string username)
     {
         var user = new Fido2User
         {
@@ -33,7 +33,7 @@ public class WebAuthnService
         };
 
         var existingCreds = _context.WebAuthnCredentials
-            .Where(c => c.UserId == userId)
+            .Where(c => c.UserId.ToString() == userId.ToString())
             .Select(c => new PublicKeyCredentialDescriptor(c.CredentialIdBytes))
             .ToList();
 
@@ -51,7 +51,7 @@ public class WebAuthnService
     }
 
     public async Task<WebAuthnCredential> FinishRegistration(
-        int userId,
+        Guid userId,
         AuthenticatorAttestationRawResponse clientResponse)
     {
         var options = _cache.Get<CredentialCreateOptions>($"registration:{userId}");
@@ -86,7 +86,7 @@ public class WebAuthnService
     }
 
     // AUTHENTICATION
-    public AssertionOptions StartLogin(string userId, List<WebAuthnCredential> creds)
+    public AssertionOptions StartLogin(Guid userId, List<WebAuthnCredential> creds)
     {
         var allowedCredentials = creds
             .Select(c => new PublicKeyCredentialDescriptor(c.CredentialIdBytes))
@@ -106,7 +106,7 @@ public class WebAuthnService
     }
 
     public async Task<bool> FinishLogin(
-        int userId,
+        Guid userId,
         AuthenticatorAssertionRawResponse clientResponse,
         WebAuthnCredential storedCredential)
     {

@@ -288,12 +288,12 @@ dotnet test
 
 ### HIGH PRIORITY
 1. **Logging & Audit Trail** - Track all auth events
+2. **Auto generate user Id and get user through them instead of through username...**
+3. **Add size constraint to user input**
 
 ### MEDIUM PRIORITY
 5. **Email Verification** - Add email service integration
 6. **Password Reset Flow** - Complete implementation
-7. **OIDC Support** - Discovery endpoint, JWKS, ID tokens
-8. **OAuth2 Authorization Server** - Authorization Code + PKCE flow
 9. **Device Tracking** - Session per device management
 
 ### LOW PRIORITY (Future)

@@ -59,11 +59,10 @@ public class AuthController : ControllerBase
         if (clientIp == null)
             return StatusCode(StatusCodes.Status500InternalServerError, "Unable to determine client IP");
 
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == request.Username);
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.Username == request.Username);
         if (user == null)
-        {
-            return Unauthorized("Invalid username or password");
-        }
+            return NotFound();
 
         // Verify password
         if (!PasswordService.VerifyPassword(request.Password, user.PasswordHash))
@@ -88,14 +87,14 @@ public class AuthController : ControllerBase
         await _context.SaveChangesAsync();
 
         // Generate tokens
-        var accessToken = await _tokenService.GenerateJwtToken(user, mfaVerified);
+        var (accessToken, jti) = await _tokenService.GenerateJwtToken(user, mfaVerified);
         var refreshTokenValue = TokenService.GenerateRefreshToken();
 
         var refreshToken = new RefreshToken
         {
-            Token = _tokenService.HashToken(refreshTokenValue), // Store hashed version
-            JwtId = Guid.NewGuid().ToString(),
-            UserId = user.Username,
+            Token = TokenService.HashToken(refreshTokenValue), // Store hashed version
+            JwtId = jti,
+            UserId = user.Id.ToString(),
             ExpiryDate = DateTime.UtcNow.AddDays(7)
         };
         
@@ -110,7 +109,7 @@ public class AuthController : ControllerBase
     [HttpPost("logout")]
     public async Task<IActionResult> Logout([FromBody] LogoutRequest request)
     {
-        var requestHash = _tokenService.HashToken(request.RefreshToken);
+        var requestHash = TokenService.HashToken(request.RefreshToken);
         var storedToken = await _context.Set<RefreshToken>()
             .FirstOrDefaultAsync(rt => rt.Token == requestHash && !rt.IsRevoked && rt.ExpiryDate >= DateTime.UtcNow);
 
@@ -128,11 +127,12 @@ public class AuthController : ControllerBase
     [HttpPost("change-password")]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
     {
-        var username = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
-        if (string.IsNullOrEmpty(username))
+        var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+        if (string.IsNullOrEmpty(userId))
             return Unauthorized();
-
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == username);
+        
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.Id.ToString() == userId);
         if (user == null)
             return NotFound();
 
@@ -151,7 +151,7 @@ public class AuthController : ControllerBase
 
         // Revoke tokens
         var tokens = await _context.RefreshTokens
-            .Where(rt => rt.UserId == username && !rt.IsRevoked)
+            .Where(rt => rt.UserId == user.Id.ToString() && !rt.IsRevoked)
             .ToListAsync();
         tokens.ForEach(t => t.IsRevoked = true);
 

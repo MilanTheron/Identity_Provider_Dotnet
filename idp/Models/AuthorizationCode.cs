@@ -1,6 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
-
-namespace idp.Models;
+﻿namespace idp.Models;
 
 public class AuthorizationCode
 {

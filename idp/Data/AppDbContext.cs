@@ -19,8 +19,8 @@ public class AppDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         var redirectUrisConverter = new ValueConverter<List<string>, string>(
-            v => JsonSerializer.Serialize<List<string>>(v, (JsonSerializerOptions?)null),
-            v => JsonSerializer.Deserialize<List<string>>(v as string ?? "[]", (JsonSerializerOptions?)null)!
+            v => JsonSerializer.Serialize(v, (JsonSerializerOptions?)null),
+            v => JsonSerializer.Deserialize<List<string>>(v, (JsonSerializerOptions?)null)!
         );
 
         var redirectUrisComparer = new ValueComparer<List<string>>(

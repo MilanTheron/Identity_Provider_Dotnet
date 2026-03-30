@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
+using System.IdentityModel.Tokens.Jwt;
 using idp.Controllers.Requests;
 using idp.Services;
 using idp.Data;
@@ -23,11 +24,16 @@ public class TotpController : ControllerBase
     [Authorize]
     [EnableRateLimiting("auth")]
     [HttpPost("setup-totp")]
-    public async Task<IActionResult> SetupTotp([FromBody] SetupTotpRequest request)
+    public async Task<IActionResult> SetupTotp()
     {
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == request.Username);
+        var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+        
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.Id.ToString() == userId);
         if (user == null)
-            return BadRequest("Invalid username");
+            return NotFound();
         
         if (user.IsTotpEnabled && !string.IsNullOrEmpty(user.TotpSecret))
             return BadRequest("TOTP already enabled");
