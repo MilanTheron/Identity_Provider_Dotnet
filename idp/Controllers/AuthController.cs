@@ -7,6 +7,7 @@ using OtpNet;
 using idp.Data;
 using idp.Models;
 using idp.Services;
+using idp.Models.Errors;
 using idp.Controllers.Requests;
 
 namespace idp.Controllers;
@@ -17,11 +18,13 @@ public class AuthController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly TokenService _tokenService;
+    private readonly ErrorService _errorService;
 
-    public AuthController(AppDbContext context, TokenService tokenService)
+    public AuthController(AppDbContext context, TokenService tokenService, ErrorService errorService)
     {
         _context = context;
         _tokenService = tokenService;
+        _errorService = errorService;
     }
 
     [AllowAnonymous]
@@ -30,7 +33,7 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
         if (await _context.Users.AnyAsync(u => u.Username == request.Username))
-            return BadRequest("User already exists");
+            return _errorService.BadReq(ErrorCodes.InvalidRequest);
         
         if (await PasswordService.IsWeak(request.Password))
             return BadRequest(@"Password is too weak, need: One maj letter, One min letter, One number, One special character([@$!%*?&^#()[\\]{}|\\\\/\\-+_.:;=,~`]), Min 12 chars");
@@ -55,16 +58,19 @@ public class AuthController : ControllerBase
     {
         var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
         if (clientIp == null)
-            return StatusCode(StatusCodes.Status500InternalServerError, "Unable to determine client IP");
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.Username == request.Username);
         if (user == null)
-            return NotFound();
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
+
+        if (string.IsNullOrEmpty(request.Scope))
+            return _errorService.BadReq(ErrorCodes.InvalidRequest);
 
         // Verify password
         if (!PasswordService.VerifyPassword(request.Password, user.PasswordHash))
-            return BadRequest("Invalid username or password");
+            return _errorService.BadReq(ErrorCodes.InvalidRequest);
 
         // Password correct, now check MFA if enabled
         bool mfaVerified = false;
@@ -72,10 +78,10 @@ public class AuthController : ControllerBase
         if (user.IsTotpEnabled)
         {
             if (string.IsNullOrEmpty(request.TotpCode) && string.IsNullOrEmpty(request.BackupCode))
-                return Unauthorized("MFA required");
-
+                return _errorService.AuthError(ErrorCodes.Unauthorized);
+            
             if (!ValidateMfa(request, user))
-                return BadRequest("Invalid MFA code");
+                return _errorService.BadReq(ErrorCodes.InvalidRequest);
 
             mfaVerified = true;
         }
@@ -89,6 +95,7 @@ public class AuthController : ControllerBase
         {
             Token = refreshTokenHash,
             JwtId = jti,
+            Scope = request.Scope,
             UserId = user.Id.ToString(),
 
             ExpiryDate = DateTime.UtcNow.AddDays(7),
@@ -135,18 +142,18 @@ public class AuthController : ControllerBase
     {
         var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
         if (string.IsNullOrEmpty(userId))
-            return Unauthorized();
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
         
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.Id.ToString() == userId);
         if (user == null)
-            return NotFound();
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         if (!PasswordService.VerifyPassword(request.OldPassword, user.PasswordHash))
-            return BadRequest("Invalid old password");
+            return _errorService.BadReq(ErrorCodes.InvalidRequest);
         
         if (request.NewPassword == request.OldPassword)
-            return BadRequest("New password cannot be the same as the old password");
+            return _errorService.BadReq(ErrorCodes.InvalidRequest);
         
         if (await PasswordService.IsWeak(request.NewPassword))
             return BadRequest(@"Password is too weak, need: One maj letter, One min letter, One number, One special character([@$!%*?&^#()[\\]{}|\\\\/\\-+_.:;=,~`]), Min 12 chars");

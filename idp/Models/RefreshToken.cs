@@ -12,6 +12,7 @@ public class RefreshToken
     public bool IsUsed { get; set; }
     public bool MfaVerified { get; set; }
     public DateTime CreatedAt { get; set; }
-    public string? CreatedByIp { get; set; }
-    public string? RevokedByIp { get; set; }
+    public string CreatedByIp { get; set; } = string.Empty;
+    public string RevokedByIp { get; set; } = string.Empty;
+    public string Scope { get; set; } = string.Empty;
 }

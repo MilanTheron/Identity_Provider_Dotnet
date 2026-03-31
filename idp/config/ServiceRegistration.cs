@@ -16,5 +16,6 @@ public class ServiceRegistration : IConfigureServices
         services.AddScoped<TokenService>();
         services.AddScoped<BackupCodeService>();
         services.AddScoped<SecurityService>();
+        services.AddScoped<ErrorService>();
     }
 }

@@ -2,9 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
-using System.Security.Cryptography;
-using System.IdentityModel.Tokens.Jwt;
-using System.Text;
+using idp.Models.Errors;
 using idp.Services;
 using idp.Data;
 using idp.Models;
@@ -17,11 +15,13 @@ public class TokenController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly TokenService _tokenService;
+    private readonly ErrorService _errorService;
     
-    public TokenController(AppDbContext context, TokenService tokenService)
+    public TokenController(AppDbContext context, TokenService tokenService, ErrorService errorService)
     {
         _context = context;
         _tokenService = tokenService;
+        _errorService = errorService;
     }
     
     [AllowAnonymous]
@@ -30,7 +30,7 @@ public class TokenController : ControllerBase
     public async Task<IActionResult> Refresh([FromBody] RefreshRequest request)
     {
         if (string.IsNullOrEmpty(request.RefreshToken))
-            return BadRequest("Refresh token is required");
+            return _errorService.BadReq(ErrorCodes.InvalidRequest);
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
         
@@ -39,10 +39,10 @@ public class TokenController : ControllerBase
             .FirstOrDefaultAsync(rt => rt.Token == requestHash);
 
         if (storedToken == null)
-            return Unauthorized("Invalid refresh token");
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         if (storedToken.IsRevoked)
-            return Unauthorized("Token revoked");
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         if (storedToken.IsUsed) // REUSE DETECTED, revoking all user sessions
         {
@@ -53,17 +53,17 @@ public class TokenController : ControllerBase
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
             
-            return Unauthorized("Token reuse detected");
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
         }
 
         if (storedToken.ExpiryDate < DateTime.UtcNow)
-            return Unauthorized("Token expired");
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.Id.ToString() == storedToken.UserId);
 
         if (user == null)
-            return NotFound();
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         // Revoke old token
         storedToken.IsUsed = true;

@@ -7,6 +7,7 @@ using System.IdentityModel.Tokens.Jwt;
 using idp.Controllers.Requests.WebAuthn;
 using idp.Models;
 using idp.Services;
+using idp.Models.Errors;
 using idp.Data;
 
 namespace idp.Controllers;
@@ -18,15 +19,13 @@ public class WebAuthnController : ControllerBase
     private readonly WebAuthnService _webAuthnService;
     private readonly AppDbContext _context;
     private readonly TokenService _tokenService;
+    private readonly ErrorService _errorService;
 
-    public WebAuthnController(
-        AppDbContext context,
-        WebAuthnService webAuthnService,
-        TokenService tokenService)
-    {
+    public WebAuthnController(AppDbContext context, WebAuthnService webAuthnService, TokenService tokenService, ErrorService errorService) {
         _context = context;
         _webAuthnService = webAuthnService;
         _tokenService = tokenService;
+        _errorService = errorService;
     }
 
     [Authorize]
@@ -36,11 +35,11 @@ public class WebAuthnController : ControllerBase
     {
         var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
         if (string.IsNullOrEmpty(userId))
-            return Unauthorized();
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
         if (user == null)
-            return NotFound();
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         var options = _webAuthnService.StartRegistration(user.Id, user.Username);
 
@@ -54,11 +53,11 @@ public class WebAuthnController : ControllerBase
     {
         var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
         if (string.IsNullOrEmpty(userId))
-            return Unauthorized();
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
         if (user == null)
-            return NotFound();
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         try
         {
@@ -72,7 +71,7 @@ public class WebAuthnController : ControllerBase
         }
         catch
         {
-            return BadRequest("Registration failed");
+            return _errorService.BadReq(ErrorCodes.InvalidRequest);
         }
     }
 
@@ -84,7 +83,7 @@ public class WebAuthnController : ControllerBase
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.Username == request.Username);
         if (user == null)
-            return NotFound();
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         var creds = await _context.WebAuthnCredentials
             .Where(c => c.UserId == user.Id)
@@ -111,20 +110,20 @@ public class WebAuthnController : ControllerBase
         }
         catch
         {
-            return BadRequest("Invalid credential format");
+            return _errorService.BadReq(ErrorCodes.InvalidRequest);
         }
 
         var storedCredential = await _context.WebAuthnCredentials
             .FirstOrDefaultAsync(c => c.CredentialIdBytes.SequenceEqual(credentialIdBytes));
 
         if (storedCredential == null)
-            return Unauthorized("Authentication failed");
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.Id == storedCredential.UserId);
 
         if (user == null)
-            return Unauthorized("Authentication failed");
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         try
         {
@@ -135,7 +134,7 @@ public class WebAuthnController : ControllerBase
             );
 
             if (!success)
-                return Unauthorized("Authentication failed");
+                return _errorService.AuthError(ErrorCodes.Unauthorized);
 
             var (accessToken, jti) = await _tokenService.GenerateJwtToken(user, true);
             var refreshTokenValue = TokenService.GenerateRefreshToken();
@@ -159,7 +158,7 @@ public class WebAuthnController : ControllerBase
         }
         catch
         {
-            return Unauthorized("Authentication failed");
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
         }
     }
 }

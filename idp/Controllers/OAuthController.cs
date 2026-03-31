@@ -8,6 +8,7 @@ using System.Text;
 using idp.Data;
 using idp.Models;
 using idp.Services;
+using idp.Models.Errors;
 using idp.Controllers.Requests;
 
 namespace idp.Controllers;
@@ -18,11 +19,13 @@ public class OAuthController : Controller
 {
     private readonly AppDbContext _context;
     private readonly TokenService _tokenService;
+    private readonly ErrorService _errorService;
 
-    public OAuthController(AppDbContext context, TokenService tokenService)
+    public OAuthController(AppDbContext context, TokenService tokenService, ErrorService errorService)
     {
         _context = context;
         _tokenService = tokenService;
+        _errorService = errorService;
     }
 
     [Authorize(Policy = "SensitiveOperation")]
@@ -83,13 +86,13 @@ public class OAuthController : Controller
     public async Task<IActionResult> Token([FromBody] TokenRequest request)
     {
         if (request.GrantType != "authorization_code")
-            return BadRequest("unsupported_grant_type");
+            return _errorService.BadReq(ErrorCodes.InvalidRequest);
 
         var client = await _context.Set<OAuthClient>()
             .FirstOrDefaultAsync(c => c.ClientId == request.ClientId);
         
         if (client == null)
-            return BadRequest("invalid_client");
+            return _errorService.BadReq(ErrorCodes.InvalidRequest);
 
         var authCode = await _context.AuthorizationCodes
             .FirstOrDefaultAsync(c => c.Code == request.Code);
@@ -98,17 +101,17 @@ public class OAuthController : Controller
             authCode.ExpiresAt < DateTime.UtcNow ||
             authCode.RedirectUri != request.RedirectUri ||
             authCode.ClientId != request.ClientId)
-            return BadRequest("invalid_grant");
+            return _errorService.BadReq(ErrorCodes.InvalidRequest);
 
         if (authCode.Used)
-            return BadRequest("invalid_grant");
+            return _errorService.BadReq(ErrorCodes.InvalidRequest);
 
         // PKCE
         if (authCode.CodeChallengeMethod != "S256")
-            return BadRequest("invalid_grant");
+            return _errorService.BadReq(ErrorCodes.InvalidRequest);
 
         if (string.IsNullOrEmpty(request.CodeVerifier))
-            return BadRequest("invalid_grant");
+            return _errorService.BadReq(ErrorCodes.InvalidRequest);
 
         var hashed = Convert.ToBase64String(
                 SHA256.HashData(Encoding.ASCII.GetBytes(request.CodeVerifier)))
@@ -119,12 +122,12 @@ public class OAuthController : Controller
         if (!CryptographicOperations.FixedTimeEquals(
                 Encoding.ASCII.GetBytes(hashed),
                 Encoding.ASCII.GetBytes(authCode.CodeChallenge!)))
-            return BadRequest("invalid_grant");
+            return _errorService.BadReq(ErrorCodes.InvalidRequest);
         
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.Id.ToString() == authCode.UserId);
         if (user == null)
-            return NotFound();
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         authCode.Used = true;
 
