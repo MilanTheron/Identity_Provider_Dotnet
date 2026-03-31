@@ -34,13 +34,13 @@ public class AuthController : ControllerBase
         if (await _context.Users.AnyAsync(u => u.Username == request.Username))
             return BadRequest("User already exists");
         
-        if (await _passwordService.IsWeak(request.Password))
+        if (await PasswordService.IsWeak(request.Password))
             return BadRequest(@"Password is too weak, need: One maj letter, One min letter, One number, One special character([@$!%*?&^#()[\\]{}|\\\\/\\-+_.:;=,~`]), Min 12 chars");
 
         var user = new User
         {
             Username = request.Username,
-            PasswordHash = _passwordService.HashPassword(request.Password),
+            PasswordHash = PasswordService.HashPassword(request.Password),
             Email = request.Email
         };
 
@@ -81,21 +81,27 @@ public class AuthController : ControllerBase
 
             mfaVerified = true;
         }
-        else
-            mfaVerified = true;
-
-        await _context.SaveChangesAsync();
 
         // Generate tokens
-        var (accessToken, jti) = await _tokenService.GenerateJwtToken(user, mfaVerified);
+        var (accessToken, jti) = await TokenService.GenerateJwtToken(user, mfaVerified);
         var refreshTokenValue = TokenService.GenerateRefreshToken();
+        var refreshTokenHash = TokenService.HashToken(refreshTokenValue);
 
         var refreshToken = new RefreshToken
         {
-            Token = TokenService.HashToken(refreshTokenValue), // Store hashed version
+            Token = refreshTokenHash,
             JwtId = jti,
             UserId = user.Id.ToString(),
-            ExpiryDate = DateTime.UtcNow.AddDays(7)
+
+            ExpiryDate = DateTime.UtcNow.AddDays(7),
+
+            CreatedAt = DateTime.UtcNow,
+            CreatedByIp = clientIp,
+
+            MfaVerified = mfaVerified,
+            IsUsed = false,
+            IsRevoked = false,
+            ReplacedByToken = null
         };
         
         _context.Add(refreshToken);
@@ -110,12 +116,14 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Logout([FromBody] LogoutRequest request)
     {
         var requestHash = TokenService.HashToken(request.RefreshToken);
-        var storedToken = await _context.Set<RefreshToken>()
-            .FirstOrDefaultAsync(rt => rt.Token == requestHash && !rt.IsRevoked && rt.ExpiryDate >= DateTime.UtcNow);
+        var storedToken = await _context.RefreshTokens
+            .FirstOrDefaultAsync(rt => rt.Token == requestHash);
 
-        if (storedToken != null && !storedToken.IsRevoked)
+        if (storedToken != null)
         {
             storedToken.IsRevoked = true;
+            storedToken.IsUsed = true;
+            storedToken.RevokedByIp = HttpContext.Connection.RemoteIpAddress?.ToString();
             await _context.SaveChangesAsync();
         }
 
@@ -142,18 +150,24 @@ public class AuthController : ControllerBase
         if (request.NewPassword == request.OldPassword)
             return BadRequest("New password cannot be the same as the old password");
         
-        if (await _passwordService.IsWeak(request.NewPassword))
+        if (await PasswordService.IsWeak(request.NewPassword))
             return BadRequest(@"Password is too weak, need: One maj letter, One min letter, One number, One special character([@$!%*?&^#()[\\]{}|\\\\/\\-+_.:;=,~`]), Min 12 chars");
 
         var transaction = await _context.Database.BeginTransactionAsync();
 
-        user.PasswordHash = _passwordService.HashPassword(request.NewPassword);
+        user.PasswordHash = PasswordService.HashPassword(request.NewPassword);
 
         // Revoke tokens
         var tokens = await _context.RefreshTokens
             .Where(rt => rt.UserId == user.Id.ToString() && !rt.IsRevoked)
             .ToListAsync();
-        tokens.ForEach(t => t.IsRevoked = true);
+        
+        tokens.ForEach(t =>
+        {
+            t.IsRevoked = true;
+            t.IsUsed = true;
+            t.RevokedByIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+        });
 
         await _context.SaveChangesAsync();
         await transaction.CommitAsync();

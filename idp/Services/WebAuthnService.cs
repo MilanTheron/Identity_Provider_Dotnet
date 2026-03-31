@@ -15,11 +15,11 @@ public class WebAuthnService
     private readonly IMemoryCache _cache;
     private readonly AppDbContext _context;
 
-    public WebAuthnService(AppDbContext context, Fido2 fido2, IMemoryCache cache)
+    public WebAuthnService(Fido2 fido2, IMemoryCache cache, AppDbContext context)
     {
-        _context = context;
         _fido2 = fido2;
         _cache = cache;
+        _context = context;
     }
 
     // REGISTRATION

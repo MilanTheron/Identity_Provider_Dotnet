@@ -32,16 +32,32 @@ public class TokenController : ControllerBase
         if (string.IsNullOrEmpty(request.RefreshToken))
             return BadRequest("Refresh token is required");
 
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+        
         var requestHash = TokenService.HashToken(request.RefreshToken);
-
         var storedToken = await _context.RefreshTokens
-            .FirstOrDefaultAsync(rt =>
-                rt.Token == requestHash &&
-                !rt.IsRevoked &&
-                rt.ExpiryDate >= DateTime.UtcNow);
+            .FirstOrDefaultAsync(rt => rt.Token == requestHash);
 
         if (storedToken == null)
             return Unauthorized("Invalid refresh token");
+
+        if (storedToken.IsRevoked)
+            return Unauthorized("Token revoked");
+
+        if (storedToken.IsUsed) // REUSE DETECTED, revoking all user sessions
+        {
+            var userTokens = _context.RefreshTokens
+                .Where(rt => rt.UserId == storedToken.UserId && !rt.IsRevoked);
+
+            await userTokens.ForEachAsync(t => t.IsRevoked = true);
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+            
+            return Unauthorized("Token reuse detected");
+        }
+
+        if (storedToken.ExpiryDate < DateTime.UtcNow)
+            return Unauthorized("Token expired");
 
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.Id.ToString() == storedToken.UserId);
@@ -50,22 +66,35 @@ public class TokenController : ControllerBase
             return NotFound();
 
         // Revoke old token
+        storedToken.IsUsed = true;
         storedToken.IsRevoked = true;
+        storedToken.RevokedByIp = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         // Generate new tokens
-        var (newAccessToken, newJti) = await _tokenService.GenerateJwtToken(user, true);
+        var (newAccessToken, newJti) = await TokenService.GenerateJwtToken(user, storedToken.MfaVerified);
         var newRefreshTokenValue = TokenService.GenerateRefreshToken();
+        var newRefreshTokenHash = TokenService.HashToken(newRefreshTokenValue);
+        storedToken.ReplacedByToken = newRefreshTokenHash;
 
         var newRefreshToken = new RefreshToken
         {
-            Token = TokenService.HashToken(newRefreshTokenValue),
+            Token = newRefreshTokenHash,
             JwtId = newJti,
             UserId = user.Id.ToString(),
-            ExpiryDate = DateTime.UtcNow.AddDays(7)
-        };
 
+            ExpiryDate = DateTime.UtcNow.AddDays(7),
+
+            CreatedAt = DateTime.UtcNow,
+            CreatedByIp = HttpContext.Connection.RemoteIpAddress?.ToString(),
+
+            MfaVerified = storedToken.MfaVerified,
+            IsUsed = false,
+            IsRevoked = false
+        };
+        
         _context.Add(newRefreshToken);
         await _context.SaveChangesAsync();
+        await transaction.CommitAsync();
 
         return Ok(new { AccessToken = newAccessToken, RefreshToken = newRefreshTokenValue });
     }

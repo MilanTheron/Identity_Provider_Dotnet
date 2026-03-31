@@ -137,7 +137,7 @@ public class WebAuthnController : ControllerBase
             if (!success)
                 return Unauthorized("Authentication failed");
 
-            var (accessToken, jti) = await _tokenService.GenerateJwtToken(user, true);
+            var (accessToken, jti) = await TokenService.GenerateJwtToken(user, true);
             var refreshTokenValue = TokenService.GenerateRefreshToken();
 
             var refreshToken = new RefreshToken

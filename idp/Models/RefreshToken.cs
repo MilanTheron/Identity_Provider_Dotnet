@@ -9,6 +9,8 @@ public class RefreshToken
     public bool IsRevoked { get; set; } = false;
     public string UserId { get; set; } = string.Empty;
     public string? ReplacedByToken { get; set; }
+    public bool IsUsed { get; set; }
+    public bool MfaVerified { get; set; }
     public DateTime CreatedAt { get; set; }
     public string? CreatedByIp { get; set; }
     public string? RevokedByIp { get; set; }

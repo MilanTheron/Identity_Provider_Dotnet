@@ -119,9 +119,7 @@ public class OAuthController : Controller
         if (!CryptographicOperations.FixedTimeEquals(
                 Encoding.ASCII.GetBytes(hashed),
                 Encoding.ASCII.GetBytes(authCode.CodeChallenge!)))
-        {
             return BadRequest("invalid_grant");
-        }
         
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.Id.ToString() == authCode.UserId);
@@ -130,7 +128,7 @@ public class OAuthController : Controller
 
         authCode.Used = true;
 
-        var (accessToken, jti) = await _tokenService.GenerateJwtToken(user, true);
+        var (accessToken, jti) = await TokenService.GenerateJwtToken(user, true);
         var refreshTokenValue = TokenService.GenerateRefreshToken();
 
         var refreshToken = new RefreshToken

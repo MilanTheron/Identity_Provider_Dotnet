@@ -7,7 +7,7 @@ namespace idp.Services;
 
 public class PasswordService
 {
-    public string HashPassword(string password)
+    public static string HashPassword(string password)
     {
         byte[] salt = new byte[128 / 8];
         using var rng = RandomNumberGenerator.Create();
@@ -54,14 +54,14 @@ public class PasswordService
         }
     }
     
-    public async Task<bool> IsWeak(string password)
+    public static async Task<bool> IsWeak(string password)
     {
         bool pwned = await CheckHaveIBeenPwned(password); // true if pwned
         bool regexOk = CheckRegex(password); // true if strong regex
         return pwned || !regexOk; // true if weak or pwned
     }
 
-    private bool CheckRegex(string password)
+    private static bool CheckRegex(string password)
     {
         string pattern = @"^(?=.*[A-Z])(?=.*[@$!%*?&^#()[\]{}|\\/\-+_.:;=,~`])(?=.*[0-9])(?=.*[a-z]).{12,}$";
         return Regex.IsMatch(password, pattern);

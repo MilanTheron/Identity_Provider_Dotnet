@@ -9,23 +9,19 @@ namespace idp.Services;
 
 public class TokenService
 {
-    private readonly IConfiguration _configuration;
+    private static readonly IConfiguration _configuration;
 
-    public TokenService(IConfiguration configuration)
+    public static async Task<(string token, string jti)> GenerateJwtToken(User user, bool mfaVerified)
     {
-        _configuration = configuration;
-    }
-
-    public async Task<(string token, string jti)> GenerateJwtToken(User user, bool mfaVerified)
-    {
-        var jti = user.Id.ToString();
+        var bytes = RandomNumberGenerator.GetBytes(32);
+        var jti = Convert.ToBase64String(bytes);
 
         var now = DateTime.UtcNow;
 
         var claims = new List<Claim>
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()), // user identity
-            new Claim(JwtRegisteredClaimNames.Jti, jti),
+            new Claim(JwtRegisteredClaimNames.Jti, jti), // token identity
             new Claim("username", user.Username),
             new Claim("mfa", mfaVerified ? "true" : "false"),
             new Claim(JwtRegisteredClaimNames.Iat,

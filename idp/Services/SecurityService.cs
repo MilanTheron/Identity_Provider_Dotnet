@@ -52,7 +52,7 @@ public class SecurityService
         return Task.CompletedTask;
     }
 
-    public Task RevokeJtiAsync(string jti)
+    public static Task RevokeJtiAsync(string jti)
     {
         if (!string.IsNullOrEmpty(jti))
             ValidJtis.TryRemove(jti, out _);

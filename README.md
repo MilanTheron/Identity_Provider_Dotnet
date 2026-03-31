@@ -155,7 +155,7 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 - ❌ Allow users to view active sessions
 - ❌ Allow revocation per device
 
-**Status**: Not started (rate limiting only)
+**Status**: Not started
 
 ---
 
@@ -253,9 +253,9 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 
 ### Implementation Status
 - ✅ Thread-safe rate limiting (ConcurrentDictionary)
-- ⏳ Handle concurrent refresh requests safely - *Needs testing*
+- ✅ Handle concurrent refresh requests safely - *Needs testing*
 - ⏳ Prevent duplicate token issuance - *Possible edge case*
-- ⏳ Ensure atomic DB operations - *Basic implementation*
+- ✅ Ensure atomic DB operations
 - ❌ Handle partial failures (e.g., token issued but DB save fails)
 
 **Files**: `SecurityService.cs`
@@ -288,7 +288,6 @@ dotnet test
 
 ### HIGH PRIORITY
 1. **Logging & Audit Trail** - Track all auth events
-2. **Auto generate user Id and get user through them instead of through username...**
 3. **Add size constraint to user input**
 
 ### MEDIUM PRIORITY
@@ -302,7 +301,7 @@ dotnet test
 
 ---
 
-### Different curl request for testing(local):
+### Different curl request for testing(outdated):
 1. Register a new user:
 ```bash
 curl -k https://127.0.0.1:5001/api/auth/register \
