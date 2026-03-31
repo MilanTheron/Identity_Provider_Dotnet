@@ -89,7 +89,31 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 
 ---
 
-## 5. Email Verification
+## 5. Login/Register Web Page
+### Concepts to Learn
+- Secure form handling (CSRF protection, input validation)
+- Authentication UX patterns (login vs register flows)
+- OAuth2 Authorization Code flow integration (PKCE, redirect handling)
+- Safe redirect handling (prevent open redirects)
+- Session/context preservation during auth flows
+- Frontend state management (SPA or server-rendered)
+
+### Implementation Status
+- ❌ Create unified `/auth` page (login + register UI)
+- ❌ Add form validation (client + server side)
+- ❌ Integrate with `/login` and `/register` endpoints
+- ✅ Handle `/authorize` flow (preserve OAuth params: client_id, redirect_uri, state, PKCE)
+- ❌ Resume authorization flow after authentication
+- ❌ Implement optional consent screen
+- ❌ Add CSRF protection
+- ❌ Prevent open redirect vulnerabilities
+- ❌ Add basic rate limiting protection on UI actions
+
+**Status**: 
+
+--- `OAuthController.cs` (backend ready, UI missing)
+
+## 6. Email Verification
 ### Concepts to Learn
 - Token-based verification flows
 - Email spoofing & phishing considerations
@@ -106,7 +130,7 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 
 ---
 
-## 6. Password Reset Flow
+## 7. Password Reset Flow
 ### Concepts to Learn
 - Secure reset token generation
 - Token expiration and single use
@@ -122,7 +146,7 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 
 ---
 
-## 7. Multi-Factor Authentication (MFA)
+## 8. Multi-Factor Authentication (MFA)
 ### Concepts to Learn
 - TOTP algorithm basics (RFC 6238)
 - Clock drift handling
@@ -141,7 +165,7 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 
 ---
 
-## 8. Device Tracking & Session Management
+## 9. Device Tracking & Session Management
 ### Concepts to Learn
 - Device fingerprinting basics (limitations)
 - Session tracking vs stateless auth
@@ -159,7 +183,7 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 
 ---
 
-## 9. Anomaly Detection (Basic)
+## 10. Anomaly Detection (Basic)
 ### Concepts to Learn
 - Risk-based authentication
 - Geo-IP basics
@@ -175,7 +199,7 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 
 ---
 
-## 10. Brute Force Protection (might use cloudflare except for account lockout)
+## 11. Brute Force Protection (might use cloudflare except for account lockout)
 ### Concepts to Learn
 - Rate limiting strategies (IP vs account) (/login and /token endpoints)
 - Lockout policies and trade-offs
@@ -194,7 +218,7 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 
 ---
 
-## 11. JWT Invalidation Strategy
+## 12. JWT Invalidation Strategy
 ### Concepts to Learn
 - Stateless vs stateful auth trade-offs
 - Token revocation patterns
@@ -213,7 +237,7 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 
 ---
 
-## 12. Security Headers & HTTPS (might use cloudflare except for CSP)
+## 13. Security Headers & HTTPS (might use cloudflare except for CSP)
 ### Concepts to Learn
 - HTTPS enforcement
 - HSTS (HTTP Strict Transport Security)
@@ -229,7 +253,7 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 
 ---
 
-## 13. Logging & Audit Trail
+## 14. Logging & Audit Trail
 ### Concepts to Learn
 - Security event logging
 - Audit trail design
@@ -245,7 +269,7 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 
 ---
 
-## 14. Concurrency & Edge Cases
+## 15. Concurrency & Edge Cases
 ### Concepts to Learn
 - Race conditions in auth systems
 - Idempotency
@@ -262,7 +286,7 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 
 ---
 
-## 15. Testing & Validation
+## 16. Testing & Validation
 ### Concepts to Learn
 - Security testing (fuzzing, abuse cases)
 - Integration testing auth flows

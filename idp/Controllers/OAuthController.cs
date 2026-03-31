@@ -128,7 +128,7 @@ public class OAuthController : Controller
 
         authCode.Used = true;
 
-        var (accessToken, jti) = await TokenService.GenerateJwtToken(user, true);
+        var (accessToken, jti) = await _tokenService.GenerateJwtToken(user, true);
         var refreshTokenValue = TokenService.GenerateRefreshToken();
 
         var refreshToken = new RefreshToken

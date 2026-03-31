@@ -16,13 +16,11 @@ namespace idp.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly AppDbContext _context;
-    private readonly PasswordService _passwordService;
     private readonly TokenService _tokenService;
 
-    public AuthController(AppDbContext context, PasswordService passwordService, TokenService tokenService)
+    public AuthController(AppDbContext context, TokenService tokenService)
     {
         _context = context;
-        _passwordService = passwordService;
         _tokenService = tokenService;
     }
 
@@ -83,7 +81,7 @@ public class AuthController : ControllerBase
         }
 
         // Generate tokens
-        var (accessToken, jti) = await TokenService.GenerateJwtToken(user, mfaVerified);
+        var (accessToken, jti) = await _tokenService.GenerateJwtToken(user, mfaVerified);
         var refreshTokenValue = TokenService.GenerateRefreshToken();
         var refreshTokenHash = TokenService.HashToken(refreshTokenValue);
 

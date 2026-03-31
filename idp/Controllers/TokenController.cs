@@ -71,7 +71,7 @@ public class TokenController : ControllerBase
         storedToken.RevokedByIp = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         // Generate new tokens
-        var (newAccessToken, newJti) = await TokenService.GenerateJwtToken(user, storedToken.MfaVerified);
+        var (newAccessToken, newJti) = await _tokenService.GenerateJwtToken(user, storedToken.MfaVerified);
         var newRefreshTokenValue = TokenService.GenerateRefreshToken();
         var newRefreshTokenHash = TokenService.HashToken(newRefreshTokenValue);
         storedToken.ReplacedByToken = newRefreshTokenHash;

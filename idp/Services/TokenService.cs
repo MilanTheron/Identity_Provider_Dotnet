@@ -9,9 +9,14 @@ namespace idp.Services;
 
 public class TokenService
 {
-    private static readonly IConfiguration _configuration;
+    private readonly IConfiguration _configuration;
 
-    public static async Task<(string token, string jti)> GenerateJwtToken(User user, bool mfaVerified)
+    public TokenService(IConfiguration configuration)
+    {
+        _configuration = configuration;
+    }
+
+    public async Task<(string token, string jti)> GenerateJwtToken(User user, bool mfaVerified)
     {
         var bytes = RandomNumberGenerator.GetBytes(32);
         var jti = Convert.ToBase64String(bytes);
