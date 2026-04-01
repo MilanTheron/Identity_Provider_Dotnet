@@ -1,4 +1,4 @@
-﻿namespace idp.Models;
+﻿namespace idp.Controllers.Requests;
 
 public class RefreshRequest
 {

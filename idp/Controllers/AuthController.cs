@@ -73,15 +73,15 @@ public class AuthController : ControllerBase
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
 
         // Password correct, now check MFA if enabled
-        bool mfaVerified = false;
+        var mfaVerified = false;
 
         if (user.IsTotpEnabled)
         {
             if (string.IsNullOrEmpty(request.TotpCode) && string.IsNullOrEmpty(request.BackupCode))
-                return _errorService.AuthError(ErrorCodes.Unauthorized);
+                return _errorService.AuthError(ErrorCodes.MfaRequired);
             
             if (!ValidateMfa(request, user))
-                return _errorService.BadReq(ErrorCodes.InvalidRequest);
+                return _errorService.BadReq(ErrorCodes.MfaRequired);
 
             mfaVerified = true;
         }
@@ -120,17 +120,24 @@ public class AuthController : ControllerBase
     [HttpPost("logout")]
     public async Task<IActionResult> Logout([FromBody] LogoutRequest request)
     {
+        var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+        if (clientIp == null)
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
+        
+        if (string.IsNullOrEmpty(request.RefreshToken))
+            return _errorService.BadReq(ErrorCodes.InvalidRequest);
+        
         var requestHash = TokenService.HashToken(request.RefreshToken);
         var storedToken = await _context.RefreshTokens
             .FirstOrDefaultAsync(rt => rt.Token == requestHash);
 
-        if (storedToken != null)
-        {
-            storedToken.IsRevoked = true;
-            storedToken.IsUsed = true;
-            storedToken.RevokedByIp = HttpContext.Connection.RemoteIpAddress?.ToString();
-            await _context.SaveChangesAsync();
-        }
+        if (storedToken == null)
+            return _errorService.ConflictError(ErrorCodes.Conflict);
+        
+        storedToken.IsRevoked = true;
+        storedToken.IsUsed = true;
+        storedToken.RevokedByIp = clientIp;
+        await _context.SaveChangesAsync();
 
         return Ok("Logged out");
     }
@@ -140,6 +147,10 @@ public class AuthController : ControllerBase
     [HttpPost("change-password")]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
     {
+        var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+        if (clientIp == null)
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
+        
         var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
         if (string.IsNullOrEmpty(userId))
             return _errorService.AuthError(ErrorCodes.Unauthorized);
@@ -171,7 +182,7 @@ public class AuthController : ControllerBase
         {
             t.IsRevoked = true;
             t.IsUsed = true;
-            t.RevokedByIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+            t.RevokedByIp = clientIp;
         });
 
         await _context.SaveChangesAsync();

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using idp.Services;
 using idp.Models;
+using System.Linq;
 using Xunit;
 using Microsoft.Extensions.Configuration;
 using System.IdentityModel.Tokens.Jwt;

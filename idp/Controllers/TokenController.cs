@@ -6,6 +6,7 @@ using idp.Models.Errors;
 using idp.Services;
 using idp.Data;
 using idp.Models;
+using idp.Controllers.Requests;
 
 namespace idp.Controllers;
 
@@ -29,6 +30,10 @@ public class TokenController : ControllerBase
     [HttpPost("token/refresh")]
     public async Task<IActionResult> Refresh([FromBody] RefreshRequest request)
     {
+        var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+        if (clientIp == null)
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
+        
         if (string.IsNullOrEmpty(request.RefreshToken))
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
 
@@ -68,7 +73,7 @@ public class TokenController : ControllerBase
         // Revoke old token
         storedToken.IsUsed = true;
         storedToken.IsRevoked = true;
-        storedToken.RevokedByIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+        storedToken.RevokedByIp = clientIp;
 
         // Generate new tokens
         var (newAccessToken, newJti) = await _tokenService.GenerateJwtToken(user, storedToken.MfaVerified);
@@ -85,7 +90,7 @@ public class TokenController : ControllerBase
             ExpiryDate = DateTime.UtcNow.AddDays(7),
 
             CreatedAt = DateTime.UtcNow,
-            CreatedByIp = HttpContext.Connection.RemoteIpAddress?.ToString(),
+            CreatedByIp = clientIp,
 
             MfaVerified = storedToken.MfaVerified,
             IsUsed = false,

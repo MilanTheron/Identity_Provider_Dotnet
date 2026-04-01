@@ -1,15 +1,15 @@
-﻿namespace idp.Controllers.Requests;
+﻿namespace idp.Controllers.Requests.OAuth;
 
 public class AuthorizeRequest
 {
-    public required string Tenant { get; set; }
-    public required string ClientId { get; set; }
-    public required string RedirectUri { get; set; }
-    public required string ResponseType { get; set; }
-    public required string Scope { get; set; }
-    public required string State { get; set; }
+    public string Tenant { get; set; } = string.Empty;
+    public string ClientId { get; set; } = string.Empty;
+    public string RedirectUri { get; set; } = string.Empty;
+    public string ResponseType { get; set; } = string.Empty;
+    public string Scope { get; set; } = string.Empty;
+    public string State { get; set; } = string.Empty;
 
     // PKCE
-    public required string CodeChallenge { get; set; }
-    public required string CodeChallengeMethod { get; set; } // "S256" 
+    public string CodeChallenge { get; set; } = string.Empty;
+    public string CodeChallengeMethod { get; set; } = string.Empty; // "S256" 
 }

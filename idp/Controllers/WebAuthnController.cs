@@ -136,7 +136,7 @@ public class WebAuthnController : ControllerBase
             if (!success)
                 return _errorService.AuthError(ErrorCodes.Unauthorized);
 
-            var (accessToken, jti) = await _tokenService.GenerateJwtToken(user, true);
+            var (accessToken, jti) = await _tokenService.GenerateJwtToken(user, false);
             var refreshTokenValue = TokenService.GenerateRefreshToken();
 
             var refreshToken = new RefreshToken

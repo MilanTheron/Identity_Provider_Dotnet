@@ -1,11 +1,15 @@
 ﻿using System.Text.Json;
 using System.ComponentModel.DataAnnotations.Schema;
-using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
+
+namespace idp.Models;
 
 public class OAuthClient
 {
     public int Id { get; set; }
-    public required string ClientId { get; set; }
+    [MaxLength(20)]
+    public string ClientId { get; set; } = string.Empty;
+    [MaxLength(2048)]
     public string RedirectUrisJson { get; set; } = "[]";
     public bool RequirePkce { get; set; } = true;
 

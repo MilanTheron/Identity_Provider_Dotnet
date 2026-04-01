@@ -9,7 +9,7 @@ using idp.Data;
 using idp.Models;
 using idp.Services;
 using idp.Models.Errors;
-using idp.Controllers.Requests;
+using idp.Controllers.Requests.OAuth;
 
 namespace idp.Controllers;
 
@@ -97,13 +97,10 @@ public class OAuthController : Controller
         var authCode = await _context.AuthorizationCodes
             .FirstOrDefaultAsync(c => c.Code == request.Code);
 
-        if (authCode == null ||
+        if (authCode == null || authCode.Used ||
             authCode.ExpiresAt < DateTime.UtcNow ||
             authCode.RedirectUri != request.RedirectUri ||
             authCode.ClientId != request.ClientId)
-            return _errorService.BadReq(ErrorCodes.InvalidRequest);
-
-        if (authCode.Used)
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
 
         // PKCE
@@ -131,7 +128,7 @@ public class OAuthController : Controller
 
         authCode.Used = true;
 
-        var (accessToken, jti) = await _tokenService.GenerateJwtToken(user, true);
+        var (accessToken, jti) = await _tokenService.GenerateJwtToken(user, false);
         var refreshTokenValue = TokenService.GenerateRefreshToken();
 
         var refreshToken = new RefreshToken
