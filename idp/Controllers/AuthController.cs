@@ -19,12 +19,16 @@ public class AuthController : ControllerBase
     private readonly AppDbContext _context;
     private readonly TokenService _tokenService;
     private readonly ErrorService _errorService;
+    private readonly PasswordService _passwordService;
+    private readonly BackupCodeService _backupCodeService;
 
-    public AuthController(AppDbContext context, TokenService tokenService, ErrorService errorService)
+    public AuthController(AppDbContext context, TokenService tokenService, ErrorService errorService, PasswordService passwordService, BackupCodeService backupCodeService)
     {
         _context = context;
         _tokenService = tokenService;
         _errorService = errorService;
+        _passwordService = passwordService;
+        _backupCodeService = backupCodeService;
     }
 
     [AllowAnonymous]
@@ -41,7 +45,7 @@ public class AuthController : ControllerBase
         var user = new User
         {
             Username = request.Username,
-            PasswordHash = PasswordService.HashPassword(request.Password),
+            PasswordHash = _passwordService.HashPassword(request.Password),
             Email = request.Email
         };
 
@@ -69,7 +73,7 @@ public class AuthController : ControllerBase
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
 
         // Verify password
-        if (!PasswordService.VerifyPassword(request.Password, user.PasswordHash))
+        if (!_passwordService.VerifyPassword(request.Password, user.PasswordHash))
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
 
         // Password correct, now check MFA if enabled
@@ -160,7 +164,7 @@ public class AuthController : ControllerBase
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
-        if (!PasswordService.VerifyPassword(request.OldPassword, user.PasswordHash))
+        if (!_passwordService.VerifyPassword(request.OldPassword, user.PasswordHash))
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
         
         if (request.NewPassword == request.OldPassword)
@@ -171,7 +175,7 @@ public class AuthController : ControllerBase
 
         var transaction = await _context.Database.BeginTransactionAsync();
 
-        user.PasswordHash = PasswordService.HashPassword(request.NewPassword);
+        user.PasswordHash = _passwordService.HashPassword(request.NewPassword);
 
         // Revoke tokens
         var tokens = await _context.RefreshTokens
@@ -210,7 +214,7 @@ public class AuthController : ControllerBase
         // Backup code
         if (!string.IsNullOrEmpty(request.BackupCode) && user.BackupCodes != null)
         {
-            var hashedBackup = BackupCodeService.HashBackupCode(request.BackupCode.Trim());
+            var hashedBackup = _backupCodeService.HashBackupCode(request.BackupCode.Trim());
 
             var match = user.BackupCodes.FirstOrDefault(c =>
                 string.Equals(c, hashedBackup, StringComparison.Ordinal)

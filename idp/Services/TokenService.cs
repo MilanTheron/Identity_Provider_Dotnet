@@ -10,19 +10,25 @@ namespace idp.Services;
 public class TokenService
 {
     private readonly IConfiguration _configuration;
+    private readonly ILogger<TokenService> _logger;
 
-    public TokenService(IConfiguration configuration)
+    public TokenService(IConfiguration configuration, ILogger<TokenService> logger)
     {
         _configuration = configuration;
+        _logger = logger;
     }
 
     public async Task<(string token, string jti)> GenerateJwtToken(User user, bool mfaVerified)
     {
+        _logger.LogInformation("Generating JWT for user {UserId}, MFA: {Mfa}", user.Id, mfaVerified);
+        
         var bytes = RandomNumberGenerator.GetBytes(32);
         var jti = Convert.ToBase64String(bytes);
 
         var now = DateTime.UtcNow;
 
+        _logger.LogInformation("JWT generated for user {UserId} with JTI {Jti}", user.Id, jti);
+        
         var claims = new List<Claim>
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()), // user identity

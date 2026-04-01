@@ -260,12 +260,12 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 - Log integrity
 
 ### Implementation Status
-- ❌ Log login attempts (success/failure)
-- ❌ Log password changes, MFA events
-- ❌ Log token issuance and revocation
-- ❌ Store logs securely and query efficiently
+- ⏳ Log login attempts (success/failure)
+- ⏳ Log password changes, MFA events
+- ⏳ Log token issuance and revocation
+- ⏳ Store logs securely and query efficiently
 
-**Status**: Not started
+**Status**: `LoggingConfig.cs`, `Services`
 
 ---
 

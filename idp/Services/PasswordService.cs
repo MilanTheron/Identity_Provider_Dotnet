@@ -7,8 +7,17 @@ namespace idp.Services;
 
 public class PasswordService
 {
-    public static string HashPassword(string password)
+    private readonly ILogger<PasswordService> _logger;
+
+    public PasswordService(ILogger<PasswordService> logger)
     {
+        _logger = logger;
+    }
+    
+    public string HashPassword(string password)
+    {
+        _logger.LogDebug("Hashing password with Argon2id");
+        
         byte[] salt = new byte[128 / 8];
         using var rng = RandomNumberGenerator.Create();
         rng.GetBytes(salt);
@@ -21,15 +30,18 @@ public class PasswordService
         
         var hashBytes = hasher.GetBytes(32);
         var hash = Convert.ToBase64String(hashBytes);
+        
+        _logger.LogDebug("Password hashed successfully");
 
         return $"{Convert.ToBase64String(salt)}:{hash}";
     }
     
-    public static bool VerifyPassword(string password, string storedHash)
+    public bool VerifyPassword(string password, string storedHash)
     {
+        _logger.LogDebug("Verifying password");
+        
         var parts = storedHash.Split(':');
-        if (parts.Length != 2)
-            return false;
+        if (parts.Length != 2) return false;
 
         try
         {
@@ -43,13 +55,18 @@ public class PasswordService
             testHash.Iterations = 5;
         
             var hashBytes = testHash.GetBytes(32);
-            return CryptographicOperations.FixedTimeEquals(
+            bool match = CryptographicOperations.FixedTimeEquals(
                 Convert.FromBase64String(hash),
                 hashBytes
             );
+            
+            if (!match)
+                _logger.LogWarning("Password verification failed");
+            return match;
         }
         catch
         {
+            _logger.LogWarning("Password verification Error");
             return false;
         }
     }

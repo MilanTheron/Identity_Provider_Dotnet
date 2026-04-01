@@ -7,6 +7,9 @@ public class MyApp : BaseWebApp
 {
     protected override void RegisterConfiguration(string[] args)
     {
+        // Logger
+        Register(new LoggingConfig());
+        
         // Services
         Register(new ServiceRegistration());
 

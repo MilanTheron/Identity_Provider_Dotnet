@@ -14,17 +14,20 @@ public class WebAuthnService
     private readonly Fido2 _fido2;
     private readonly IMemoryCache _cache;
     private readonly AppDbContext _context;
+    private readonly ILogger<WebAuthnService> _logger;
 
-    public WebAuthnService(Fido2 fido2, IMemoryCache cache, AppDbContext context)
+    public WebAuthnService(Fido2 fido2, IMemoryCache cache, AppDbContext context, ILogger<WebAuthnService> logger)
     {
         _fido2 = fido2;
         _cache = cache;
         _context = context;
+        _logger = logger;
     }
 
     // REGISTRATION
     public CredentialCreateOptions StartRegistration(Guid userId, string username)
     {
+        _logger.LogDebug("Starting WebAuthn registration for user {UserId}", userId);
         var user = new Fido2User
         {
             DisplayName = username,
@@ -44,16 +47,17 @@ public class WebAuthnService
             AuthenticatorSelection = new AuthenticatorSelection(),
             AttestationPreference = AttestationConveyancePreference.None
         });
+        
+        _logger.LogDebug("Generated registration options for user {UserId}", userId);
 
         _cache.Set($"registration:{userId}", options, TimeSpan.FromMinutes(5));
 
         return options;
     }
 
-    public async Task<WebAuthnCredential> FinishRegistration(
-        Guid userId,
-        AuthenticatorAttestationRawResponse clientResponse)
+    public async Task<WebAuthnCredential> FinishRegistration(Guid userId, AuthenticatorAttestationRawResponse clientResponse)
     {
+        _logger.LogDebug("Finishing WebAuthn registration for user {UserId}", userId);
         var options = _cache.Get<CredentialCreateOptions>($"registration:{userId}");
         if (options == null)
             throw new Exception("Registration options not found");
@@ -80,6 +84,8 @@ public class WebAuthnService
         _context.WebAuthnCredentials.Add(credential);
         await _context.SaveChangesAsync();
 
+        _logger.LogDebug("WebAuthn registration completed for user {UserId}, credential ID: {CredentialId}", userId, Convert.ToBase64String(result.Id));
+        
         _cache.Remove($"registration:{userId}");
 
         return credential;
@@ -88,6 +94,7 @@ public class WebAuthnService
     // AUTHENTICATION
     public AssertionOptions StartLogin(Guid userId, List<WebAuthnCredential> creds)
     {
+        _logger.LogDebug("Starting WebAuthn login for user {UserId}", userId);
         var allowedCredentials = creds
             .Select(c => new PublicKeyCredentialDescriptor(c.CredentialIdBytes))
             .ToList();
@@ -100,16 +107,16 @@ public class WebAuthnService
         if (options == null)
             throw new Exception("Login options not found");
 
+        _logger.LogDebug("Generated login options for user {UserId}", userId);
+        
         _cache.Set($"login:{userId}", options, TimeSpan.FromMinutes(5));
 
         return options;
     }
 
-    public async Task<bool> FinishLogin(
-        Guid userId,
-        AuthenticatorAssertionRawResponse clientResponse,
-        WebAuthnCredential storedCredential)
+    public async Task<bool> FinishLogin(Guid userId, AuthenticatorAssertionRawResponse clientResponse, WebAuthnCredential storedCredential)
     {
+        _logger.LogDebug("Finishing WebAuthn login for user {UserId}", userId);
         var options = _cache.Get<AssertionOptions>($"login:{userId}");
         if (options == null)
             throw new Exception("Login options not found");
@@ -136,6 +143,8 @@ public class WebAuthnService
         _context.WebAuthnCredentials.Update(storedCredential);
         await _context.SaveChangesAsync();
 
+        _logger.LogDebug("WebAuthn login completed for user {UserId}, credential ID: {CredentialId}", userId, Convert.ToBase64String(storedCredential.CredentialIdBytes));
+        
         _cache.Remove($"login:{userId}");
 
         return true;

@@ -6,8 +6,16 @@ namespace idp.Services;
 
 public class BackupCodeService
 {
-    public static List<string> GenerateBackupCodes(int count = 10, int codeLength = 12)
+    private readonly ILogger<BackupCodeService> _logger;
+
+    public BackupCodeService(ILogger<BackupCodeService> logger)
     {
+        _logger = logger;
+    }
+    
+    public List<string> GenerateBackupCodes(int count = 10, int codeLength = 12)
+    {
+        _logger.LogDebug("Generating {Count} backup codes with length {CodeLength}", count, codeLength);
         var codes = new List<string>();
         for (int i = 0; i < count; i++)
         {
@@ -16,8 +24,9 @@ public class BackupCodeService
         return codes;
     }
     
-    public static string HashBackupCode(string code)
+    public string HashBackupCode(string code)
     {
+        _logger.LogDebug("Hashing backup code with Argon2id");
         var salt = RandomNumberGenerator.GetBytes(16);
         using var hasher = new Argon2id(Encoding.UTF8.GetBytes(code));
         hasher.Salt = salt;

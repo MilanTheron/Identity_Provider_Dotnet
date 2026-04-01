@@ -16,11 +16,13 @@ public class TotpController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly ErrorService _errorService;
+    private readonly BackupCodeService _backUpCodeService;
     
-    public TotpController(AppDbContext context, ErrorService errorService)
+    public TotpController(AppDbContext context, ErrorService errorService, BackupCodeService backUpCodeService)
     {
         _context = context;
         _errorService = errorService;
+        _backUpCodeService = backUpCodeService;
     }
     
     [Authorize]
@@ -44,8 +46,8 @@ public class TotpController : ControllerBase
         user.TotpSecret = Base32Encoding.ToString(secret);
         user.IsTotpEnabled = true;
 
-        var plainCodes = BackupCodeService.GenerateBackupCodes();
-        user.BackupCodes = plainCodes.Select(code => BackupCodeService.HashBackupCode(code)).ToList();
+        var plainCodes = _backUpCodeService.GenerateBackupCodes();
+        user.BackupCodes = plainCodes.Select(code => _backUpCodeService.HashBackupCode(code)).ToList();
 
         await _context.SaveChangesAsync();
 
