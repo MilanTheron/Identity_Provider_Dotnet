@@ -2,6 +2,7 @@
 using System.Security.Claims;
 using System.Security.Cryptography;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.WebUtilities;
 using System.Text;
 using idp.Models;
 
@@ -23,7 +24,7 @@ public class TokenService
         _logger.LogInformation("Generating JWT for user {UserId}, MFA: {Mfa}", user.Id, mfaVerified);
         
         var bytes = RandomNumberGenerator.GetBytes(32);
-        var jti = Convert.ToBase64String(bytes);
+        var jti = WebEncoders.Base64UrlEncode(bytes);
 
         var now = DateTime.UtcNow;
 
@@ -35,6 +36,7 @@ public class TokenService
             new Claim(JwtRegisteredClaimNames.Jti, jti), // token identity
             new Claim("username", user.Username),
             new Claim("mfa", mfaVerified ? "true" : "false"),
+            new Claim("email_verified", user.EmailVerified ? "true" : "false"),
             new Claim(JwtRegisteredClaimNames.Iat,
                 DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
                 ClaimValueTypes.Integer64)
@@ -63,18 +65,18 @@ public class TokenService
         return (new JwtSecurityTokenHandler().WriteToken(token), jti);
     }
 
-    public static string GenerateRefreshToken()
+    public static string GenerateSecureToken()
     {
         using var rng = RandomNumberGenerator.Create();
         var randomNumber = new byte[64];
         rng.GetBytes(randomNumber);
-        return Convert.ToBase64String(randomNumber);
+        return WebEncoders.Base64UrlEncode(randomNumber);
     }
     
     public static string HashToken(string token)
     {
         using var sha256 = SHA256.Create();
         var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(token));
-        return Convert.ToBase64String(bytes);
+        return WebEncoders.Base64UrlEncode(bytes);
     }
 }

@@ -18,7 +18,7 @@ public class PasswordService
     {
         _logger.LogDebug("Hashing password with Argon2id");
         
-        byte[] salt = new byte[128 / 8];
+        byte[] salt = new byte[128 / 4];
         using var rng = RandomNumberGenerator.Create();
         rng.GetBytes(salt);
 

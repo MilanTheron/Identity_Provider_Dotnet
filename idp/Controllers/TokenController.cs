@@ -41,7 +41,7 @@ public class TokenController : ControllerBase
         
         var requestHash = TokenService.HashToken(request.RefreshToken);
         var storedToken = await _context.RefreshTokens
-            .FirstOrDefaultAsync(rt => rt.Token == requestHash);
+            .SingleOrDefaultAsync(rt => rt.Token == requestHash);
 
         if (storedToken == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
@@ -65,7 +65,7 @@ public class TokenController : ControllerBase
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         var user = await _context.Users
-            .FirstOrDefaultAsync(u => u.Id.ToString() == storedToken.UserId);
+            .SingleOrDefaultAsync(u => u.Id.ToString() == storedToken.UserId);
 
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
@@ -77,7 +77,7 @@ public class TokenController : ControllerBase
 
         // Generate new tokens
         var (newAccessToken, newJti) = await _tokenService.GenerateJwtToken(user, storedToken.MfaVerified);
-        var newRefreshTokenValue = TokenService.GenerateRefreshToken();
+        var newRefreshTokenValue = TokenService.GenerateSecureToken();
         var newRefreshTokenHash = TokenService.HashToken(newRefreshTokenValue);
         storedToken.ReplacedByToken = newRefreshTokenHash;
 

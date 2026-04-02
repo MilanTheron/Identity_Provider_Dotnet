@@ -312,7 +312,7 @@ dotnet test
 
 ### HIGH PRIORITY
 1. **Logging & Audit Trail** - Track all auth events
-3. **Add size constraint to user input**
+3. **maybe change (username, key) tuples to (email, key)** - More standard and allows for email verification
 
 ### MEDIUM PRIORITY
 5. **Email Verification** - Add email service integration

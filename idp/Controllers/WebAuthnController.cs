@@ -37,7 +37,7 @@ public class WebAuthnController : ControllerBase
         if (string.IsNullOrEmpty(userId))
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
+        var user = await _context.Users.SingleOrDefaultAsync(u => u.Id.ToString() == userId);
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
@@ -55,7 +55,7 @@ public class WebAuthnController : ControllerBase
         if (string.IsNullOrEmpty(userId))
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
+        var user = await _context.Users.SingleOrDefaultAsync(u => u.Id.ToString() == userId);
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
@@ -114,13 +114,13 @@ public class WebAuthnController : ControllerBase
         }
 
         var storedCredential = await _context.WebAuthnCredentials
-            .FirstOrDefaultAsync(c => c.CredentialIdBytes.SequenceEqual(credentialIdBytes));
+            .SingleOrDefaultAsync(c => c.CredentialIdBytes.SequenceEqual(credentialIdBytes));
 
         if (storedCredential == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         var user = await _context.Users
-            .FirstOrDefaultAsync(u => u.Id == storedCredential.UserId);
+            .SingleOrDefaultAsync(u => u.Id == storedCredential.UserId);
 
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
@@ -137,7 +137,7 @@ public class WebAuthnController : ControllerBase
                 return _errorService.AuthError(ErrorCodes.Unauthorized);
 
             var (accessToken, jti) = await _tokenService.GenerateJwtToken(user, false);
-            var refreshTokenValue = TokenService.GenerateRefreshToken();
+            var refreshTokenValue = TokenService.GenerateSecureToken();
 
             var refreshToken = new RefreshToken
             {

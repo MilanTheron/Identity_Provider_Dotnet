@@ -2,8 +2,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.WebUtilities;
 using System.Security.Cryptography;
 using System.IdentityModel.Tokens.Jwt;
+using System.Text.RegularExpressions;
 using System.Text;
 using idp.Data;
 using idp.Models;
@@ -15,7 +17,7 @@ namespace idp.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-public class OAuthController : Controller
+public class OAuthController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly TokenService _tokenService;
@@ -37,7 +39,7 @@ public class OAuthController : Controller
             return BadRequest(new { error = "invalid_response_type" });
 
         var client = await _context.Set<OAuthClient>()
-            .FirstOrDefaultAsync(c => c.ClientId == request.ClientId);
+            .SingleOrDefaultAsync(c => c.ClientId == request.ClientId);
 
         if (client == null)
             return BadRequest(new { error = "invalid_client" });
@@ -53,12 +55,13 @@ public class OAuthController : Controller
             return BadRequest(new { error = "invalid_user_id" });
 
         if (string.IsNullOrEmpty(request.CodeChallenge) ||
-            request.CodeChallengeMethod != "S256")
-        {
-            return BadRequest(new { error = "invalid_pkce" });
-        }
+            !Regex.IsMatch(request.CodeChallenge, @"^[A-Za-z0-9\-_]+$"))
+            return BadRequest(new { error = "invalid_code_challenge" });
 
-        var code = Guid.NewGuid().ToString("N");
+        if (string.IsNullOrEmpty(request.CodeChallenge) || request.CodeChallengeMethod != "S256")
+            return BadRequest(new { error = "invalid_pkce" });
+
+        var code = TokenService.GenerateSecureToken();
 
         var authCode = new AuthorizationCode
         {
@@ -89,13 +92,13 @@ public class OAuthController : Controller
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
 
         var client = await _context.Set<OAuthClient>()
-            .FirstOrDefaultAsync(c => c.ClientId == request.ClientId);
+            .SingleOrDefaultAsync(c => c.ClientId == request.ClientId);
         
         if (client == null)
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
 
         var authCode = await _context.AuthorizationCodes
-            .FirstOrDefaultAsync(c => c.Code == request.Code);
+            .SingleOrDefaultAsync(c => c.Code == request.Code);
 
         if (authCode == null || authCode.Used ||
             authCode.ExpiresAt < DateTime.UtcNow ||
@@ -109,16 +112,14 @@ public class OAuthController : Controller
 
         if (string.IsNullOrEmpty(request.CodeVerifier))
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
-
-        var hashed = Convert.ToBase64String(
-                SHA256.HashData(Encoding.ASCII.GetBytes(request.CodeVerifier)))
-            .TrimEnd('=')
-            .Replace('+', '-')
-            .Replace('/', '_');
+        
+        var hashed = WebEncoders.Base64UrlEncode(
+            SHA256.HashData(Encoding.UTF8.GetBytes(request.CodeVerifier))
+        );
 
         if (!CryptographicOperations.FixedTimeEquals(
-                Encoding.ASCII.GetBytes(hashed),
-                Encoding.ASCII.GetBytes(authCode.CodeChallenge!)))
+                Encoding.UTF8.GetBytes(hashed),
+                Encoding.UTF8.GetBytes(authCode.CodeChallenge!)))
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
         
         var user = await _context.Users
@@ -126,21 +127,39 @@ public class OAuthController : Controller
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
-        authCode.Used = true;
+        if (!user.EmailVerified)
+            return _errorService.AuthError(ErrorCodes.EmailNotVerified);
 
-        var (accessToken, jti) = await _tokenService.GenerateJwtToken(user, false);
-        var refreshTokenValue = TokenService.GenerateRefreshToken();
+        string accessToken;
+        string refreshTokenValue;
 
-        var refreshToken = new RefreshToken
+        try
         {
-            Token = TokenService.HashToken(refreshTokenValue), // Store hashed version
-            JwtId = jti,
-            UserId = user.Id.ToString(),
-            ExpiryDate = DateTime.UtcNow.AddDays(7)
-        };
-        
-        _context.Add(refreshToken);
-        await _context.SaveChangesAsync();
+            using var tx = await _context.Database.BeginTransactionAsync();
+
+            authCode.Used = true;
+
+            (accessToken, var jti) = await _tokenService.GenerateJwtToken(user, false);
+            refreshTokenValue = TokenService.GenerateSecureToken();
+
+            var refreshToken = new RefreshToken
+            {
+                Token = TokenService.HashToken(refreshTokenValue),
+                JwtId = jti,
+                UserId = user.Id.ToString(),
+                ExpiryDate = DateTime.UtcNow.AddDays(7)
+            };
+
+            _context.Add(refreshToken);
+            await _context.SaveChangesAsync();
+
+            await tx.CommitAsync();
+        }
+        catch
+        {
+            await _context.Database.RollbackTransactionAsync();
+            throw;
+        }
 
         return Ok(new
         {

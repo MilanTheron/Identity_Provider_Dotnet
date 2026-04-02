@@ -8,7 +8,13 @@ public class User
     [MaxLength(15)]
     public required string Username { get; set; } = string.Empty;
     [MaxLength(25)]
-    public string? Email { get; set; }
+    public string Email { get; set; } = string.Empty;
+    public bool EmailVerified { get; set; } = false;
+    [MaxLength(200)]
+    public string EmailVerificationTokenHash { get; set; } = string.Empty;
+    public DateTime? EmailVerificationTokenExpiry { get; set; }
+    
+    
     public List<WebAuthnCredential> Credentials { get; set; } = new();
     [MaxLength(200)]
     public required string PasswordHash { get; set; } = string.Empty;

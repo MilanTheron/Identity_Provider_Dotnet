@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Cryptography;
 using OtpNet;
 using idp.Data;
 using idp.Models;
@@ -41,13 +42,19 @@ public class AuthController : ControllerBase
         
         if (await PasswordService.IsWeak(request.Password))
             return BadRequest(@"Password is too weak, need: One maj letter, One min letter, One number, One special character([@$!%*?&^#()[\\]{}|\\\\/\\-+_.:;=,~`]), Min 12 chars");
-
+        
         var user = new User
         {
             Username = request.Username,
             PasswordHash = _passwordService.HashPassword(request.Password),
             Email = request.Email
         };
+        
+        var rawToken = TokenService.GenerateSecureToken();
+        var hashedToken = TokenService.HashToken(rawToken);
+
+        user.EmailVerificationTokenHash = hashedToken;
+        user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24);
 
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
@@ -65,13 +72,16 @@ public class AuthController : ControllerBase
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         var user = await _context.Users
-            .FirstOrDefaultAsync(u => u.Username == request.Username);
+            .SingleOrDefaultAsync(u => u.Username == request.Username);
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         if (string.IsNullOrEmpty(request.Scope))
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
 
+        if (!user.EmailVerified)
+            return _errorService.AuthError(ErrorCodes.EmailNotVerified);
+        
         // Verify password
         if (!_passwordService.VerifyPassword(request.Password, user.PasswordHash))
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
@@ -92,7 +102,7 @@ public class AuthController : ControllerBase
 
         // Generate tokens
         var (accessToken, jti) = await _tokenService.GenerateJwtToken(user, mfaVerified);
-        var refreshTokenValue = TokenService.GenerateRefreshToken();
+        var refreshTokenValue = TokenService.GenerateSecureToken();
         var refreshTokenHash = TokenService.HashToken(refreshTokenValue);
 
         var refreshToken = new RefreshToken
@@ -133,7 +143,7 @@ public class AuthController : ControllerBase
         
         var requestHash = TokenService.HashToken(request.RefreshToken);
         var storedToken = await _context.RefreshTokens
-            .FirstOrDefaultAsync(rt => rt.Token == requestHash);
+            .SingleOrDefaultAsync(rt => rt.Token == requestHash);
 
         if (storedToken == null)
             return _errorService.ConflictError(ErrorCodes.Conflict);
@@ -160,7 +170,7 @@ public class AuthController : ControllerBase
             return _errorService.AuthError(ErrorCodes.Unauthorized);
         
         var user = await _context.Users
-            .FirstOrDefaultAsync(u => u.Id.ToString() == userId);
+            .SingleOrDefaultAsync(u => u.Id.ToString() == userId);
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
@@ -217,7 +227,10 @@ public class AuthController : ControllerBase
             var hashedBackup = _backupCodeService.HashBackupCode(request.BackupCode.Trim());
 
             var match = user.BackupCodes.FirstOrDefault(c =>
-                string.Equals(c, hashedBackup, StringComparison.Ordinal)
+                CryptographicOperations.FixedTimeEquals(
+                    Convert.FromBase64String(c),
+                    Convert.FromBase64String(hashedBackup)
+                )
             );
 
             if (match != null)
