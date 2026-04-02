@@ -51,7 +51,7 @@ public class TotpController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        var qrCodeUrl = $"otpauth://totp/Idp:{user.Username}?secret={user.TotpSecret}&issuer=Idp";
+        var qrCodeUrl = $"otpauth://totp/Idp:{user.Email}?secret={user.TotpSecret}&issuer=Idp";
 
         return Ok(new { Secret = user.TotpSecret, QrCodeUrl = qrCodeUrl, BackupCodes = plainCodes });
     }

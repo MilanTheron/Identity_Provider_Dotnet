@@ -22,14 +22,25 @@ public class AuthController : ControllerBase
     private readonly ErrorService _errorService;
     private readonly PasswordService _passwordService;
     private readonly BackupCodeService _backupCodeService;
+    private readonly SendEmailService _emailService;
+    private readonly ILogger<AuthController> _logger;
 
-    public AuthController(AppDbContext context, TokenService tokenService, ErrorService errorService, PasswordService passwordService, BackupCodeService backupCodeService)
+    public AuthController(
+        AppDbContext context, 
+        TokenService tokenService, 
+        ErrorService errorService, 
+        PasswordService passwordService, 
+        BackupCodeService backupCodeService, 
+        SendEmailService emailService,
+        ILogger<AuthController> logger)
     {
         _context = context;
         _tokenService = tokenService;
         _errorService = errorService;
         _passwordService = passwordService;
         _backupCodeService = backupCodeService;
+        _emailService = emailService;
+        _logger = logger;
     }
 
     [AllowAnonymous]
@@ -37,7 +48,7 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
-        if (await _context.Users.AnyAsync(u => u.Username == request.Username))
+        if (await _context.Users.AnyAsync(u => u.Email == request.Email))
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
         
         if (await PasswordService.IsWeak(request.Password))
@@ -45,9 +56,8 @@ public class AuthController : ControllerBase
         
         var user = new User
         {
-            Username = request.Username,
+            Email = request.Email,
             PasswordHash = _passwordService.HashPassword(request.Password),
-            Email = request.Email
         };
         
         var rawToken = TokenService.GenerateSecureToken();
@@ -58,6 +68,20 @@ public class AuthController : ControllerBase
 
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
+        
+        
+        // Send verification email
+        var verifyUrl = $"{Request.Scheme}://{Request.Host}/api/email/verify-email?token={rawToken}&userId={user.Id}";
+        try
+        {
+            _emailService.SendEmail(user.Email, "Verify your email", $"Click to verify: <a href='{verifyUrl}'>link</a>");
+            _logger.LogInformation("Verification email sent to {Email}", user.Email);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send verification email to {Email}", user.Email);
+            return StatusCode(500, "User created but failed to send verification email");
+        }
     
         return Ok("User registered");
     }
@@ -72,7 +96,7 @@ public class AuthController : ControllerBase
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         var user = await _context.Users
-            .SingleOrDefaultAsync(u => u.Username == request.Username);
+            .SingleOrDefaultAsync(u => u.Email == request.Email);
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 

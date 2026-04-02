@@ -5,23 +5,25 @@ namespace idp.Models;
 public class User
 {
     public Guid Id { get; set; } = Guid.NewGuid();
-    [MaxLength(15)]
-    public required string Username { get; set; } = string.Empty;
-    [MaxLength(25)]
-    public string Email { get; set; } = string.Empty;
-    public bool EmailVerified { get; set; } = false;
+    
+    [MaxLength(50)]
+    public required string Email { get; set; } = string.Empty;
+    public bool EmailVerified { get; set; }
     [MaxLength(200)]
     public string EmailVerificationTokenHash { get; set; } = string.Empty;
     public DateTime? EmailVerificationTokenExpiry { get; set; }
-    
-    
+
+    [MaxLength(200)]
+    public string PasswordResetTokenHash { get; set; } = string.Empty;
+    public DateTime? PasswordResetTokenExpiry { get; set; }
+
     public List<WebAuthnCredential> Credentials { get; set; } = new();
     [MaxLength(200)]
     public required string PasswordHash { get; set; } = string.Empty;
-    
-    [MaxLength(30)]
-    public string? TotpSecret { get; set; } // For TOTP
-    public bool IsTotpEnabled { get; set; } = false;
 
-    public List<string>? BackupCodes { get; set; } // Hashed backup codes
+    [MaxLength(30)]
+    public string TotpSecret { get; set; } = string.Empty;
+    public bool IsTotpEnabled { get; set; }
+
+    public List<string> BackupCodes { get; set; } = new();
 }

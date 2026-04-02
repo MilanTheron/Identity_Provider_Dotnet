@@ -34,7 +34,7 @@ public class TokenService
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()), // user identity
             new Claim(JwtRegisteredClaimNames.Jti, jti), // token identity
-            new Claim("username", user.Username),
+            new Claim("email", user.Email),
             new Claim("mfa", mfaVerified ? "true" : "false"),
             new Claim("email_verified", user.EmailVerified ? "true" : "false"),
             new Claim(JwtRegisteredClaimNames.Iat,

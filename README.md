@@ -120,8 +120,8 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 - Expiring, single-use tokens
 
 ### Implementation Status
-- ❌ Generate email verification token
-- ❌ Send email with verification link
+- ✅ Generate email verification token
+- ✅ Send email with verification link
 - ❌ Store hashed token with expiration
 - ❌ Mark email as verified upon confirmation
 - ❌ Prevent login until email is verified
@@ -137,12 +137,12 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 - Abuse prevention (rate limiting)
 
 ### Implementation Status
-- ❌ Create "forgot password" endpoint
-- ❌ Generate and email reset token
+- ✅ Create "forgot password" endpoint
+- ✅ Generate and email reset token
 - ❌ Validate token before allowing password change
-- ✅ Invalidate all sessions after password change - *Already implemented in change-password*
+- ✅ Invalidate all sessions after password change
 
-**Status**: Not started (partially supported)
+**Status**: `EmailController.cs`, `AuthController.cs`
 
 ---
 

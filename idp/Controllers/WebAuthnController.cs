@@ -41,7 +41,7 @@ public class WebAuthnController : ControllerBase
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
-        var options = _webAuthnService.StartRegistration(user.Id, user.Username);
+        var options = _webAuthnService.StartRegistration(user.Id, user.Email);
 
         return Ok(options);
     }
@@ -81,7 +81,7 @@ public class WebAuthnController : ControllerBase
     public async Task<IActionResult> StartWebAuthnLogin([FromBody] WebAuthnLoginRequest request)
     {
         var user = await _context.Users
-            .FirstOrDefaultAsync(u => u.Username == request.Username);
+            .FirstOrDefaultAsync(u => u.Email == request.Email);
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 

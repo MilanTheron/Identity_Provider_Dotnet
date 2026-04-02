@@ -1,7 +1,7 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Mvc;
 using System.Security.Cryptography;
 using idp.Data;
 using idp.Services;
@@ -16,22 +16,24 @@ public class EmailController : ControllerBase
     private readonly AppDbContext _context;
     private readonly ErrorService _errorService;
     private readonly ILogger<EmailController> _logger;
+    private readonly SendEmailService _emailService;
+    private readonly PasswordService _passwordService;
 
-    public EmailController(AppDbContext context, ErrorService errorService, ILogger<EmailController> logger)
+    public EmailController(AppDbContext context, ErrorService errorService, ILogger<EmailController> logger, SendEmailService emailService, PasswordService passwordService)
     {
         _context = context;
         _errorService = errorService;
         _logger = logger;
+        _emailService = emailService;
+        _passwordService = passwordService;
     }
-    
+
     [AllowAnonymous]
     [EnableRateLimiting("auth")]
     [HttpGet("verify-email")]
     public async Task<IActionResult> VerifyEmail(string token, string userId)
     {
-        var user = await _context.Users
-            .FirstOrDefaultAsync(u => u.Id.ToString() == userId);
-
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
@@ -40,7 +42,7 @@ public class EmailController : ControllerBase
 
         if (user.EmailVerificationTokenExpiry == null || user.EmailVerificationTokenExpiry < DateTime.UtcNow)
             return _errorService.BadReq("token_expired");
-        
+
         if (string.IsNullOrEmpty(user.EmailVerificationTokenHash))
             return _errorService.AuthError("invalid_token");
 
@@ -49,36 +51,92 @@ public class EmailController : ControllerBase
         if (!CryptographicOperations.FixedTimeEquals(
                 Convert.FromBase64String(user.EmailVerificationTokenHash),
                 Convert.FromBase64String(hashed)))
-        {
             return _errorService.AuthError("invalid_token");
-        }
 
         user.EmailVerified = true;
-        user.EmailVerificationTokenHash = null;
-        user.EmailVerificationTokenExpiry = null;
-
+        user.EmailVerificationTokenHash = "";
+        user.EmailVerificationTokenExpiry = new();
         await _context.SaveChangesAsync();
 
         return Ok("Email verified");
     }
-    
+
     [HttpPost("resend-verification")]
-    public async Task<IActionResult> Resend(string email)
+    public async Task<IActionResult> ResendVerification([FromBody] string email)
     {
         var user = await _context.Users.SingleOrDefaultAsync(u => u.Email == email);
-        if (user == null) return Ok();
-
-        if (user.EmailVerified) return Ok();
+        if (user == null || user.EmailVerified) return Ok();
 
         var rawToken = TokenService.GenerateSecureToken();
         user.EmailVerificationTokenHash = TokenService.HashToken(rawToken);
         user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24);
-
         await _context.SaveChangesAsync();
 
-        // send email again
-        _logger.LogInformation("Verify link: https://localhost:5001/api/email/verify-email?token={token}&userId={user.Id}", rawToken);
+        var verifyUrl = $"{Request.Scheme}://{Request.Host}/api/email/verify-email?token={rawToken}&userId={user.Id}";
+        _emailService.SendEmail(user.Email, "Verify your email", $"Click to verify: <a href='{verifyUrl}'>link</a>");
+        _logger.LogInformation("Verification email sent to {Email}", user.Email);
 
         return Ok();
+    }
+
+    [AllowAnonymous]
+    [EnableRateLimiting("auth")]
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword([FromBody] string email)
+    {
+        var user = await _context.Users.SingleOrDefaultAsync(u => u.Email == email);
+        if (user == null) return Ok(); // avoid leaking info
+
+        var rawToken = TokenService.GenerateSecureToken();
+        user.PasswordResetTokenHash = TokenService.HashToken(rawToken);
+        user.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(1);
+        await _context.SaveChangesAsync();
+
+        var resetUrl = $"{Request.Scheme}://{Request.Host}/api/email/reset-password?token={rawToken}&userId={user.Id}";
+        _emailService.SendEmail(user.Email, "Reset your password", $"Click here to reset your password: <a href='{resetUrl}'>link</a>");
+        _logger.LogInformation("Password reset email sent to {Email}", user.Email);
+
+        return Ok();
+    }
+
+    [AllowAnonymous]
+    [EnableRateLimiting("auth")]
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword(string token, string userId, [FromBody] string newPassword)
+    {
+        var user = await _context.Users.SingleOrDefaultAsync(u => u.Id.ToString() == userId);
+        if (user == null)
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
+
+        if (user.PasswordResetTokenExpiry == null || user.PasswordResetTokenExpiry < DateTime.UtcNow)
+            return _errorService.BadReq("token_expired");
+
+        if (string.IsNullOrEmpty(user.PasswordResetTokenHash))
+            return _errorService.AuthError("invalid_token");
+
+        var hashed = TokenService.HashToken(token);
+
+        if (!CryptographicOperations.FixedTimeEquals(
+                Convert.FromBase64String(user.PasswordResetTokenHash),
+                Convert.FromBase64String(hashed)))
+            return _errorService.AuthError("invalid_token");
+
+        if (await PasswordService.IsWeak(newPassword))
+            return BadRequest("Password too weak");
+
+        user.PasswordHash = _passwordService.HashPassword(newPassword);
+        user.PasswordResetTokenHash = "";
+        user.PasswordResetTokenExpiry = new();
+
+        // revoke all sessions
+        var tokens = await _context.RefreshTokens.Where(rt => rt.UserId == user.Id.ToString() && !rt.IsRevoked).ToListAsync();
+        foreach (var t in tokens)
+        {
+            t.IsRevoked = true;
+            t.IsUsed = true;
+        }
+
+        await _context.SaveChangesAsync();
+        return Ok("Password reset successfully");
     }
 }
