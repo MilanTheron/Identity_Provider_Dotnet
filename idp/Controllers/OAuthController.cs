@@ -128,7 +128,7 @@ public class OAuthController : ControllerBase
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         if (!user.EmailVerified)
-            return _errorService.AuthError(ErrorCodes.EmailNotVerified);
+            return _errorService.AuthError(ErrorCodes.InvalidCredentials);
 
         string accessToken;
         string refreshTokenValue;

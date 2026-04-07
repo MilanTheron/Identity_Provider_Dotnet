@@ -17,7 +17,7 @@ public class User
     public string PasswordResetTokenHash { get; set; } = string.Empty;
     public DateTime? PasswordResetTokenExpiry { get; set; }
 
-    public List<WebAuthnCredential> Credentials { get; set; } = new();
+    public List<WebAuthnCredential> Credentials { get; set; }
     [MaxLength(200)]
     public required string PasswordHash { get; set; } = string.Empty;
 
@@ -25,5 +25,5 @@ public class User
     public string TotpSecret { get; set; } = string.Empty;
     public bool IsTotpEnabled { get; set; }
 
-    public List<string> BackupCodes { get; set; } = new();
+    public List<string> BackupCodes { get; set; }
 }

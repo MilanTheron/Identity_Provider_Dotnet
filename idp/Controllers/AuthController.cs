@@ -50,40 +50,37 @@ public class AuthController : ControllerBase
     {
         if (await _context.Users.AnyAsync(u => u.Email == request.Email))
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
-        
+    
         if (await PasswordService.IsWeak(request.Password))
             return BadRequest(@"Password is too weak, need: One maj letter, One min letter, One number, One special character([@$!%*?&^#()[\\]{}|\\\\/\\-+_.:;=,~`]), Min 12 chars");
-        
+    
         var user = new User
         {
             Email = request.Email,
             PasswordHash = _passwordService.HashPassword(request.Password),
+            EmailVerified = false
         };
-        
+    
         var rawToken = TokenService.GenerateSecureToken();
-        var hashedToken = TokenService.HashToken(rawToken);
-
-        user.EmailVerificationTokenHash = hashedToken;
+        user.EmailVerificationTokenHash = TokenService.HashToken(rawToken);
         user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24);
 
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
-        
-        
-        // Send verification email
+
         var verifyUrl = $"{Request.Scheme}://{Request.Host}/api/email/verify-email?token={rawToken}&userId={user.Id}";
+
         try
         {
-            _emailService.SendEmail(user.Email, "Verify your email", $"Click to verify: <a href='{verifyUrl}'>link</a>");
+            await _emailService.SendEmail(user.Email, "Verify your email", $"Click to verify: <a href='{verifyUrl}'>link</a>");
             _logger.LogInformation("Verification email sent to {Email}", user.Email);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send verification email to {Email}", user.Email);
-            return StatusCode(500, "User created but failed to send verification email");
         }
-    
-        return Ok("User registered");
+
+        return Ok("User registered. If the email exists, a verification email has been sent.");
     }
 
     [AllowAnonymous]
@@ -101,10 +98,10 @@ public class AuthController : ControllerBase
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         if (string.IsNullOrEmpty(request.Scope))
-            return _errorService.BadReq(ErrorCodes.InvalidRequest);
+            return _errorService.AuthError(ErrorCodes.InvalidCredentials);
 
         if (!user.EmailVerified)
-            return _errorService.AuthError(ErrorCodes.EmailNotVerified);
+            return _errorService.AuthError(ErrorCodes.InvalidCredentials);
         
         // Verify password
         if (!_passwordService.VerifyPassword(request.Password, user.PasswordHash))
@@ -143,8 +140,7 @@ public class AuthController : ControllerBase
 
             MfaVerified = mfaVerified,
             IsUsed = false,
-            IsRevoked = false,
-            ReplacedByToken = null
+            IsRevoked = false
         };
         
         _context.Add(refreshToken);
@@ -246,7 +242,7 @@ public class AuthController : ControllerBase
         }
 
         // Backup code
-        if (!string.IsNullOrEmpty(request.BackupCode) && user.BackupCodes != null)
+        if (!string.IsNullOrEmpty(request.BackupCode) && user.BackupCodes.Count > 0)
         {
             var hashedBackup = _backupCodeService.HashBackupCode(request.BackupCode.Trim());
 

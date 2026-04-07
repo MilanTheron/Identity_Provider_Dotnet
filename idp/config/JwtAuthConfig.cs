@@ -4,6 +4,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.AspNetCore.Authorization;
 using System.IdentityModel.Tokens.Jwt;
 using idp.Services;
+using idp.Data;
 
 namespace idp.config;
 
@@ -37,8 +38,34 @@ public class JwtAuthConfig : IConfigureServices, IConfigureApp
                     },
                     OnTokenValidated = async context =>
                     {
+                        var sp = context.HttpContext.RequestServices;
+
+                        var db = sp.GetRequiredService<AppDbContext>();
+
+                        var userId = context.Principal?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
                         var jti = context.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
-                        if (jti == null || !await SecurityService.ValidateJtiAsync(jti))
+
+                        if (userId == null || jti == null)
+                        {
+                            context.Fail("Invalid token");
+                            return;
+                        }
+
+                        var user = await db.Users.FindAsync(userId);
+
+                        if (user == null)
+                        {
+                            context.Fail("User no longer exists");
+                            return;
+                        }
+
+                        if (!user.EmailVerified)
+                        {
+                            context.Fail("Email not verified");
+                            return;
+                        }
+
+                        if (!await SecurityService.ValidateJtiAsync(jti))
                             context.Fail("Invalid token");
                     }
                 };

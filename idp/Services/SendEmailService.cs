@@ -20,7 +20,7 @@ public class SendEmailService
         _smtpPass = _configuration["Smtp:Pass"];
     }
 
-    public void SendEmail(string toEmail, string subject, string body)
+    public async Task SendEmail(string toEmail, string subject, string body)
     {
         using var client = new SmtpClient(_smtpHost, _smtpPort)
         {
@@ -30,6 +30,6 @@ public class SendEmailService
 
         var mail = new MailMessage(_smtpUser, toEmail, subject, body);
         mail.IsBodyHtml = true;
-        client.Send(mail);
+        await client.SendMailAsync(mail);
     }
 }
