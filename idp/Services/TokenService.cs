@@ -25,7 +25,7 @@ public class TokenService
         
         var bytes = RandomNumberGenerator.GetBytes(32);
         var jti = WebEncoders.Base64UrlEncode(bytes);
-        var now = DateTime.UtcNow;  
+        var now = DateTime.UtcNow;
         
         var claims = new List<Claim>
         {

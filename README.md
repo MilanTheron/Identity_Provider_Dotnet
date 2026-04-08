@@ -138,7 +138,7 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 ### Implementation Status
 - ✅ Create "forgot password" endpoint
 - ✅ Generate and email reset token
-- ❌ Validate token before allowing password change
+- ✅ Validate token before allowing password change
 - ✅ Invalidate all sessions after password change
 
 **Status**: `EmailController.cs`, `AuthController.cs`
@@ -158,7 +158,6 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 - ✅ Allow TOTP or backup code verification during login
 - ✅ Invalidate used backup codes
 - ✅ Clock drift handling
-- ❌ Return backup codes to user after setup
 - ❌ Email/SMS OTP fallback
 
 **Files**: `BackupCodeService.cs`, `TotpController.cs`, `AuthController.cs`
