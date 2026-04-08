@@ -30,7 +30,7 @@ public class OAuthController : ControllerBase
         _errorService = errorService;
     }
 
-    [Authorize(Policy = "SensitiveOperation")]
+    [AllowAnonymous]
     [EnableRateLimiting("auth")]
     [HttpGet("authorize")]
     public async Task<IActionResult> Authorize([FromQuery] AuthorizeRequest request)
@@ -55,6 +55,7 @@ public class OAuthController : ControllerBase
             return BadRequest(new { error = "invalid_user_id" });
 
         if (string.IsNullOrEmpty(request.CodeChallenge) ||
+            request.CodeChallenge.Length > 128 ||
             !Regex.IsMatch(request.CodeChallenge, @"^[A-Za-z0-9\-_]+$"))
             return BadRequest(new { error = "invalid_code_challenge" });
 
@@ -70,6 +71,7 @@ public class OAuthController : ControllerBase
             RedirectUri = request.RedirectUri,
             CodeChallenge = request.CodeChallenge,
             CodeChallengeMethod = request.CodeChallengeMethod,
+            Scope = request.Scope,
             ExpiresAt = DateTime.UtcNow.AddMinutes(5),
             Used = false,
             UserId = userId
@@ -97,6 +99,9 @@ public class OAuthController : ControllerBase
         if (client == null)
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
 
+        if (string.IsNullOrEmpty(request.Code))
+            return _errorService.BadReq(ErrorCodes.InvalidRequest);
+        
         var authCode = await _context.AuthorizationCodes
             .SingleOrDefaultAsync(c => c.Code == request.Code);
 
@@ -105,6 +110,10 @@ public class OAuthController : ControllerBase
             authCode.RedirectUri != request.RedirectUri ||
             authCode.ClientId != request.ClientId)
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
+
+        if (!string.IsNullOrEmpty(request.Scope) && 
+            request.Scope != authCode.Scope)
+            return _errorService.BadReq("invalid_scope");
 
         // PKCE
         if (authCode.CodeChallengeMethod != "S256")
@@ -161,9 +170,12 @@ public class OAuthController : ControllerBase
             throw;
         }
 
+        var idToken = await _tokenService.GenerateIdToken(user);
+
         return Ok(new
         {
             AccessToken = accessToken,
+            IdToken = idToken,
             TokenType = "Bearer",
             RefreshToken = refreshTokenValue,
             ExpiresIn = 1800

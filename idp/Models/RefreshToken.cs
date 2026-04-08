@@ -5,7 +5,7 @@ namespace idp.Models;
 public class RefreshToken
 {
     public int Id { get; set; }
-    [MaxLength(30)]
+    [MaxLength(150)]
     public string Token { get; set; } = string.Empty;
     [MaxLength(25)]
     public string JwtId { get; set; } = string.Empty;
@@ -13,7 +13,7 @@ public class RefreshToken
     public bool IsRevoked { get; set; } = false;
     [MaxLength(25)]
     public string UserId { get; set; } = string.Empty;
-    [MaxLength(30)]
+    [MaxLength(150)]
     public string ReplacedByToken { get; set; } = string.Empty;
     public bool IsUsed { get; set; }
     public bool MfaVerified { get; set; }

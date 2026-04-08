@@ -11,7 +11,7 @@ public class RateLimitConfig : IConfigureServices
             o.AddFixedWindowLimiter("auth", opt =>
             {
                 opt.Window = TimeSpan.FromMinutes(1);
-                opt.PermitLimit = 5;
+                opt.PermitLimit = 10;
                 opt.QueueLimit = 0;
             });
         });

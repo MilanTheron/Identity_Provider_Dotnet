@@ -29,7 +29,8 @@ public class SendEmailService
         };
 
         var mail = new MailMessage(_smtpUser, toEmail, subject, body);
-        mail.IsBodyHtml = true;
+        mail.IsBodyHtml = true; 
+
         await client.SendMailAsync(mail);
     }
 }

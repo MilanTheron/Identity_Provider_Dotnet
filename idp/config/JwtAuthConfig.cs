@@ -39,13 +39,13 @@ public class JwtAuthConfig : IConfigureServices, IConfigureApp
                     OnTokenValidated = async context =>
                     {
                         var sp = context.HttpContext.RequestServices;
-
                         var db = sp.GetRequiredService<AppDbContext>();
 
                         var userId = context.Principal?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
                         var jti = context.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+                        var mailVerified = context.Principal?.FindFirst("email_verified")?.Value;
 
-                        if (userId == null || jti == null)
+                        if (userId == null || jti == null || mailVerified == null)
                         {
                             context.Fail("Invalid token");
                             return;
@@ -59,7 +59,7 @@ public class JwtAuthConfig : IConfigureServices, IConfigureApp
                             return;
                         }
 
-                        if (!user.EmailVerified)
+                        if (!mailVerified.Equals("true", StringComparison.OrdinalIgnoreCase))
                         {
                             context.Fail("Email not verified");
                             return;

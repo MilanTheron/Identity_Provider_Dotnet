@@ -17,6 +17,8 @@ public class AuthorizationCode
     public string CodeChallengeMethod { get; set; } = string.Empty;
     [MaxLength(25)]
     public string UserId { get; set; } = string.Empty;
+    [MaxLength(200)]
+    public string Scope { get; set; } = string.Empty;
     public bool Used { get; set; } = false;
     public DateTime ExpiresAt { get; set; }
 }

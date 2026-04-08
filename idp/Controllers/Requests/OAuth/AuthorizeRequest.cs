@@ -2,14 +2,14 @@
 
 public class AuthorizeRequest
 {
-    public string Tenant { get; set; } = string.Empty;
-    public string ClientId { get; set; } = string.Empty;
-    public string RedirectUri { get; set; } = string.Empty;
-    public string ResponseType { get; set; } = string.Empty;
-    public string Scope { get; set; } = string.Empty;
-    public string State { get; set; } = string.Empty;
+    public string? Tenant { get; set; }
+    public string? ClientId { get; set; }
+    public string? RedirectUri { get; set; }
+    public string? ResponseType { get; set; }
+    public string? Scope { get; set; }
+    public string? State { get; set; }
 
     // PKCE
-    public string CodeChallenge { get; set; } = string.Empty;
-    public string CodeChallengeMethod { get; set; } = string.Empty; // "S256" 
+    public string? CodeChallenge { get; set; }
+    public string? CodeChallengeMethod { get; set; } // "S256" 
 }

@@ -48,6 +48,9 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
+        if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Password))
+            return _errorService.BadReq(ErrorCodes.InvalidRequest);
+        
         if (await _context.Users.AnyAsync(u => u.Email == request.Email))
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
     
@@ -65,9 +68,6 @@ public class AuthController : ControllerBase
         user.EmailVerificationTokenHash = TokenService.HashToken(rawToken);
         user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24);
 
-        _context.Users.Add(user);
-        await _context.SaveChangesAsync();
-
         var verifyUrl = $"{Request.Scheme}://{Request.Host}/api/email/verify-email?token={rawToken}&userId={user.Id}";
 
         try
@@ -79,6 +79,9 @@ public class AuthController : ControllerBase
         {
             _logger.LogError(ex, "Failed to send verification email to {Email}", user.Email);
         }
+
+        _context.Users.Add(user); // check Async Add
+        await _context.SaveChangesAsync();
 
         return Ok("User registered. If the email exists, a verification email has been sent.");
     }
@@ -97,15 +100,13 @@ public class AuthController : ControllerBase
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
-        if (string.IsNullOrEmpty(request.Scope))
-            return _errorService.AuthError(ErrorCodes.InvalidCredentials);
+        var scope = request.Scope ?? "openid profile email";
 
-        if (!user.EmailVerified)
+        if (!user.EmailVerified || string.IsNullOrEmpty(request.Password))
             return _errorService.AuthError(ErrorCodes.InvalidCredentials);
         
-        // Verify password
         if (!_passwordService.VerifyPassword(request.Password, user.PasswordHash))
-            return _errorService.BadReq(ErrorCodes.InvalidRequest);
+            return _errorService.AuthError(ErrorCodes.InvalidCredentials);
 
         // Password correct, now check MFA if enabled
         var mfaVerified = false;
@@ -130,7 +131,7 @@ public class AuthController : ControllerBase
         {
             Token = refreshTokenHash,
             JwtId = jti,
-            Scope = request.Scope,
+            Scope = scope,
             UserId = user.Id.ToString(),
 
             ExpiryDate = DateTime.UtcNow.AddDays(7),
@@ -176,90 +177,65 @@ public class AuthController : ControllerBase
         return Ok("Logged out");
     }
 
-    [EnableRateLimiting("auth")]
-    [Authorize(Policy = "SensitiveOperation")]
-    [HttpPost("change-password")]
-    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
-    {
-        var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
-        if (clientIp == null)
-            return _errorService.AuthError(ErrorCodes.Unauthorized);
-        
-        var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
-        if (string.IsNullOrEmpty(userId))
-            return _errorService.AuthError(ErrorCodes.Unauthorized);
-        
-        var user = await _context.Users
-            .SingleOrDefaultAsync(u => u.Id.ToString() == userId);
-        if (user == null)
-            return _errorService.AuthError(ErrorCodes.Unauthorized);
-
-        if (!_passwordService.VerifyPassword(request.OldPassword, user.PasswordHash))
-            return _errorService.BadReq(ErrorCodes.InvalidRequest);
-        
-        if (request.NewPassword == request.OldPassword)
-            return _errorService.BadReq(ErrorCodes.InvalidRequest);
-        
-        if (await PasswordService.IsWeak(request.NewPassword))
-            return BadRequest(@"Password is too weak, need: One maj letter, One min letter, One number, One special character([@$!%*?&^#()[\\]{}|\\\\/\\-+_.:;=,~`]), Min 12 chars");
-
-        var transaction = await _context.Database.BeginTransactionAsync();
-
-        user.PasswordHash = _passwordService.HashPassword(request.NewPassword);
-
-        // Revoke tokens
-        var tokens = await _context.RefreshTokens
-            .Where(rt => rt.UserId == user.Id.ToString() && !rt.IsRevoked)
-            .ToListAsync();
-        
-        tokens.ForEach(t =>
-        {
-            t.IsRevoked = true;
-            t.IsUsed = true;
-            t.RevokedByIp = clientIp;
-        });
-
-        await _context.SaveChangesAsync();
-        await transaction.CommitAsync();
-
-        return Ok("Password changed and all sessions revoked");
-    }
-
     private bool ValidateMfa(LoginRequest request, User user)
     {
-        // TOTP
-        if (!string.IsNullOrEmpty(request.TotpCode))
+        // prevent both being used at once
+        if (!string.IsNullOrWhiteSpace(request.TotpCode) &&
+            !string.IsNullOrWhiteSpace(request.BackupCode))
+            return false;
+
+        // ---- TOTP ----
+        if (!string.IsNullOrWhiteSpace(request.TotpCode))
         {
             if (string.IsNullOrEmpty(user.TotpSecret))
                 return false;
 
-            var secretBytes = Base32Encoding.ToBytes(user.TotpSecret);
-            var totp = new Totp(secretBytes);
-            var window = new VerificationWindow(previous: 1, future: 1);
-
-            if (totp.VerifyTotp(request.TotpCode.Trim(), out _, window))
-                return true;
-        }
-
-        // Backup code
-        if (!string.IsNullOrEmpty(request.BackupCode) && user.BackupCodes.Count > 0)
-        {
-            var hashedBackup = _backupCodeService.HashBackupCode(request.BackupCode.Trim());
-
-            var match = user.BackupCodes.FirstOrDefault(c =>
-                CryptographicOperations.FixedTimeEquals(
-                    Convert.FromBase64String(c),
-                    Convert.FromBase64String(hashedBackup)
-                )
-            );
-
-            if (match != null)
+            try
             {
-                user.BackupCodes.Remove(match);
+                var secretBytes = Base32Encoding.ToBytes(user.TotpSecret);
+                var totp = new Totp(secretBytes);
+
+                var window = new VerificationWindow(previous: 1, future: 1);
+
+                var code = request.TotpCode.Trim();
+
+                if (!totp.VerifyTotp(code, out var timeStepMatched, window))
+                    return false;
+
+                if (user.LastTotpStepUsed.HasValue &&
+                    user.LastTotpStepUsed.Value == timeStepMatched)
+                    return false;
+
+                user.LastTotpStepUsed = timeStepMatched;
                 return true;
+            }
+            catch
+            {
+                return false;
             }
         }
 
-        return false;
+        // ---- Backup code ----
+        if (string.IsNullOrWhiteSpace(request.BackupCode))
+            return false;
+
+        if (user.BackupCodes.Count == 0)
+            return false;
+
+        var input = request.BackupCode.Trim();
+        var hashedInput = _backupCodeService.HashBackupCode(input);
+
+        var match = user.BackupCodes.FirstOrDefault(stored =>
+            CryptographicOperations.FixedTimeEquals(
+                Convert.FromBase64String(stored),
+                Convert.FromBase64String(hashedInput)
+            )
+        );
+
+        if (match == null)
+            return false;
+
+        user.BackupCodes.Remove(match);
+        return true;
     }
 }

@@ -80,6 +80,9 @@ public class WebAuthnController : ControllerBase
     [HttpPost("webauthn/login/start")]
     public async Task<IActionResult> StartWebAuthnLogin([FromBody] WebAuthnLoginRequest request)
     {
+        if (string.IsNullOrEmpty(request.Email))
+            return _errorService.BadReq(ErrorCodes.InvalidRequest);
+        
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.Email == request.Email);
         if (user == null)

@@ -2,9 +2,10 @@
 
 public class TokenRequest
 {
-    public string ClientId { get; set; } = string.Empty;
-    public string GrantType { get; set; } = string.Empty;
-    public string Code { get; set; } = string.Empty;
-    public string RedirectUri { get; set; } = string.Empty;
-    public string CodeVerifier { get; set; } = string.Empty;
+    public string? ClientId { get; set; }
+    public string? GrantType { get; set; }
+    public string? Code { get; set; }
+    public string? RedirectUri { get; set; }
+    public string? CodeVerifier { get; set; }
+    public string? Scope { get; set; }
 }

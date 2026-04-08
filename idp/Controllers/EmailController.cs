@@ -7,7 +7,6 @@ using idp.Data;
 using idp.Services;
 using idp.Models.Errors;
 using idp.Controllers.Requests.Email;
-using Microsoft.AspNetCore.Identity.Data;
 
 namespace idp.Controllers;
 
@@ -33,9 +32,9 @@ public class EmailController : ControllerBase
     [AllowAnonymous]
     [EnableRateLimiting("auth")]
     [HttpGet("verify-email")]
-    public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailRequest request)
+    public async Task<IActionResult> VerifyEmail([FromQuery] string token, [FromQuery] string userId)
     {
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id.ToString() == request.UserId);
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
@@ -45,10 +44,10 @@ public class EmailController : ControllerBase
         if (user.EmailVerificationTokenExpiry == null || user.EmailVerificationTokenExpiry < DateTime.UtcNow)
             return _errorService.BadReq("token_expired");
 
-        if (string.IsNullOrEmpty(user.EmailVerificationTokenHash) || string.IsNullOrEmpty(request.Token))
+        if (string.IsNullOrEmpty(user.EmailVerificationTokenHash) || string.IsNullOrEmpty(token))
             return _errorService.AuthError("invalid_token");
-
-        var hashed = TokenService.HashToken(request.Token);
+        
+        var hashed = TokenService.HashToken(token);
 
         if (!CryptographicOperations.FixedTimeEquals(
                 Convert.FromBase64String(user.EmailVerificationTokenHash),
@@ -63,6 +62,7 @@ public class EmailController : ControllerBase
         return Ok("Email verified");
     }
 
+    [AllowAnonymous]
     [EnableRateLimiting("auth")]
     [HttpPost("resend-verification")]
     public async Task<IActionResult> ResendVerification([FromBody] ResendVerificationRequest request)
@@ -89,7 +89,7 @@ public class EmailController : ControllerBase
     [AllowAnonymous]
     [EnableRateLimiting("auth")]
     [HttpPost("forgot-password")]
-    public async Task<IActionResult> ForgotPassword([FromBody] Requests.Email.ForgotPasswordRequest request)
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
     {
         var user = await _context.Users.SingleOrDefaultAsync(u => u.Email == request.Email);
         if (user == null)
@@ -113,7 +113,7 @@ public class EmailController : ControllerBase
     [AllowAnonymous]
     [EnableRateLimiting("auth")]
     [HttpPost("reset-password")]
-    public async Task<IActionResult> ResetPassword([FromBody] Requests.Email.ResetPasswordRequest request)
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
     {
         var user = await _context.Users.SingleOrDefaultAsync(u => u.Id.ToString() == request.UserId);
         if (user == null)

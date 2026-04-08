@@ -15,11 +15,12 @@
 - ✅ Use strong hashing (Argon2id with 5 iterations)
 - ✅ Ensure constant-time password comparison
 - ✅ Return generic error messages for login failures
-- ✅ Add delay on failed authentication attempts
-- ✅ Enforce password policy (length, complexity, entropy)
+- ⚠️ Add delay on failed authentication attempts - *NOT IMPLEMENTED*
+- ✅ Enforce password policy
 - ✅ Check passwords against known breaches (Have I Been Pwned API)
 
-**Files**: `PasswordService.cs`
+**Files**: `PasswordService.cs`, `AuthController.cs`
+**Issues**: Missing failed login attempt delay; no account lockout after X failed attempts
 
 ---
 
@@ -60,7 +61,7 @@
 - ✅ Implement PKCE verification
 - ✅ Store authorization codes securely (short-lived, one-time use)
 
-**Files**: `TokenService.cs`, `AuthController.cs`, `TokenController.cs`
+**Files**: `OAuthController.cs`, `TokenController.cs`, `AuthorizationCode.cs`
 
 ---
 
@@ -122,11 +123,9 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 ### Implementation Status
 - ✅ Generate email verification token
 - ✅ Send email with verification link
-- ❌ Store hashed token with expiration
-- ❌ Mark email as verified upon confirmation
-- ❌ Prevent login until email is verified
+- ✅ Store hashed token with expiration
 
-**Status**: Not started
+**Files**: `EmailController.cs`, `AuthController.cs`
 
 ---
 
@@ -159,9 +158,10 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 - ✅ Allow TOTP or backup code verification during login
 - ✅ Invalidate used backup codes
 - ✅ Clock drift handling
+- ❌ Return backup codes to user after setup
 - ❌ Email/SMS OTP fallback
 
-**Files**: `BackupCodeService.cs`, `AuthController.cs`
+**Files**: `BackupCodeService.cs`, `TotpController.cs`, `AuthController.cs`
 
 ---
 
@@ -310,18 +310,18 @@ dotnet test
 
 ## Next Steps (Priority Order)
 
-### HIGH PRIORITY
-1. **Logging & Audit Trail** - Track all auth events
-3. **maybe change (username, key) tuples to (email, key)** - More standard and allows for email verification
+### **CRITICAL - FIX IMMEDIATELY**
+1. Return Backup Codes after TOTP setup
 
-### MEDIUM PRIORITY
-5. **Email Verification** - Add email service integration
-6. **Password Reset Flow** - Complete implementation
-9. **Device Tracking** - Session per device management
+### **HIGH PRIORITY**
+2. Redirect unauthenticated users in OAuth authorize endpoint
 
-### LOW PRIORITY (Future)
-10. **Anomaly Detection** - Geo-IP, impossible travel
-12. **Redis Integration** - Distributed rate limiting
+### **MEDIUM PRIORITY**
+3. Add WebAuthn flow proper integration
+4. Add Redis for distributed rate limiting
+5. Device tracking and session management
+6. Anomaly detection (geo-IP)
+7. Comprehensive audit logging
 
 ---
 
@@ -366,7 +366,11 @@ curl -k https://127.0.0.1:5001/api/auth/change-password \
 - "register"
 - "login"
 - "logout"
-- "change-password"
+
+- "verify-email"
+- "resend-verification"
+- "forgot-password"
+- "reset-password"
 
 - "/Error"
 - "/Error/{statusCode}"

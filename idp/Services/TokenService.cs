@@ -25,18 +25,15 @@ public class TokenService
         
         var bytes = RandomNumberGenerator.GetBytes(32);
         var jti = WebEncoders.Base64UrlEncode(bytes);
-
-        var now = DateTime.UtcNow;
-
-        _logger.LogInformation("JWT generated for user {UserId} with JTI {Jti}", user.Id, jti);
+        var now = DateTime.UtcNow;  
         
         var claims = new List<Claim>
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()), // user identity
             new Claim(JwtRegisteredClaimNames.Jti, jti), // token identity
             new Claim("email", user.Email),
-            new Claim("mfa", mfaVerified ? "true" : "false"),
             new Claim("email_verified", user.EmailVerified ? "true" : "false"),
+            new Claim("mfa", mfaVerified ? "true" : "false"),
             new Claim(JwtRegisteredClaimNames.Iat,
                 DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
                 ClaimValueTypes.Integer64)
@@ -44,11 +41,7 @@ public class TokenService
 
         var rsa = SecurityService.Rsa;
         var keyId = _configuration["Jwt:KeyId"];
-        var key = new RsaSecurityKey(rsa)
-        {
-            KeyId = keyId
-        };
-
+        var key = new RsaSecurityKey(rsa) { KeyId = keyId };
         var creds = new SigningCredentials(key, SecurityAlgorithms.RsaSha256);
         var expiry = now.AddMinutes(30);
 
@@ -63,6 +56,38 @@ public class TokenService
         await SecurityService.StoreJtiAsync(jti, expiry);
 
         return (new JwtSecurityTokenHandler().WriteToken(token), jti);
+    }
+    
+    public async Task<string> GenerateIdToken(User user)
+    {
+        _logger.LogInformation("Generating ID token for user {UserId}", user.Id);
+        
+        var now = DateTime.UtcNow;
+        var claims = new List<Claim>
+        {
+            new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+            new Claim("email", user.Email),
+            new Claim("email_verified", user.EmailVerified ? "true" : "false"),
+            new Claim(JwtRegisteredClaimNames.Iat, 
+                DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
+                ClaimValueTypes.Integer64)
+        };
+
+        var rsa = SecurityService.Rsa;
+        var keyId = _configuration["Jwt:KeyId"];
+        var key = new RsaSecurityKey(rsa) { KeyId = keyId };
+        var creds = new SigningCredentials(key, SecurityAlgorithms.RsaSha256);
+        var expiry = now.AddMinutes(30);
+
+        var token = new JwtSecurityToken(
+            issuer: _configuration["Jwt:Issuer"],
+            audience: _configuration["Jwt:Audience"],
+            claims: claims,
+            notBefore: now,
+            expires: expiry,
+            signingCredentials: creds);
+        
+        return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
     public static string GenerateSecureToken()

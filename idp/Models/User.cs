@@ -24,6 +24,7 @@ public class User
     [MaxLength(30)]
     public string TotpSecret { get; set; } = string.Empty;
     public bool IsTotpEnabled { get; set; }
+    public long? LastTotpStepUsed { get; set; }
 
     public List<string> BackupCodes { get; set; }
 }
