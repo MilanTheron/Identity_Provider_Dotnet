@@ -158,7 +158,7 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 - ✅ Allow TOTP or backup code verification during login
 - ✅ Invalidate used backup codes
 - ✅ Clock drift handling
-- ❌ Email/SMS OTP fallback
+- ✅ Email/SMS OTP fallback
 
 **Files**: `BackupCodeService.cs`, `TotpController.cs`, `AuthController.cs`
 
@@ -173,12 +173,12 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 ### Implementation Status
 - ✅ IP-based rate limiting
 - ❌ Device fingerprinting
-- ❌ Store device info (IP, user-agent, timestamps)
+- ✅ Store device info (IP, user-agent, timestamps)
 - ❌ Associate refresh tokens with devices
 - ❌ Allow users to view active sessions
 - ❌ Allow revocation per device
 
-**Status**: Not started
+**Files**: `AuthController.cs`
 
 ---
 

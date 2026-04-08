@@ -2,6 +2,24 @@
 
 This document provides visual representations of all authentication and authorization workflows.
 
+## Summary
+
+### ✅ Working Flows
+- User Login (password validation, TOTP)
+- Token Refresh (rotation + reuse detection)
+- Password Reset (token-based)
+- Logout (token revocation)
+- OAuth2 Authorization
+- TOTP Setup
+- TOTP Fallback
+- Email Verification
+- WellKnown Discovery
+- Rate Limiting
+- Authorization Code scope tracking
+- PKCE length validation
+- Error handling consistency
+- RefreshToken storage
+
 ---
 
 ## 1. User Registration & Email Verification Flow
@@ -646,22 +664,3 @@ Rate: 15 req/min
 Endpoint: All others
 Rate: 15 req/min
 ```
-
----
-
-## Summary
-
-### ✅ Working Flows
-- User Login (password validation, TOTP)
-- Token Refresh (rotation + reuse detection)
-- Password Reset (token-based)
-- Logout (token revocation)
-- OAuth2 Authorization
-- TOTP Setup (codes not returned)
-- Email Verification
-- WellKnown Discovery
-- Rate Limiting
-- Authorization Code scope tracking
-- PKCE length validation
-- Error handling consistency
-- RefreshToken storage
