@@ -2,7 +2,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
-using System.IdentityModel.Tokens.Jwt;
 using System.Security.Cryptography;
 using OtpNet;
 using idp.Data;
@@ -56,12 +55,24 @@ public class AuthController : ControllerBase
     
         if (await PasswordService.IsWeak(request.Password))
             return BadRequest(@"Password is too weak, need: One maj letter, One min letter, One number, One special character([@$!%*?&^#()[\\]{}|\\\\/\\-+_.:;=,~`]), Min 12 chars");
-    
+
+        var device = new Device
+        {
+            DeviceId = HttpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault() 
+                       ?? HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknow",
+            Location = null,
+            LastUsed = DateTime.UtcNow
+        };
+        _context.Devices.Add(device);
+        
         var user = new User
         {
+            DeviceId = device.Id,
             Email = request.Email,
             PasswordHash = _passwordService.HashPassword(request.Password),
-            EmailVerified = false
+            EmailVerified = false,
+            Credentials = new List<WebAuthnCredential>(),
+            BackupCodes = new List<string>()
         };
     
         var rawToken = TokenService.GenerateSecureToken();
@@ -80,7 +91,7 @@ public class AuthController : ControllerBase
             _logger.LogError(ex, "Failed to send verification email to {Email}", user.Email);
         }
 
-        _context.Users.Add(user); // check Async Add
+        _context.Users.Add(user);
         await _context.SaveChangesAsync();
 
         return Ok("User registered. If the email exists, a verification email has been sent.");
@@ -113,9 +124,10 @@ public class AuthController : ControllerBase
 
         if (user.IsTotpEnabled)
         {
-            if (string.IsNullOrEmpty(request.TotpCode) && string.IsNullOrEmpty(request.BackupCode))
+            if (string.IsNullOrEmpty(request.TotpCode) && string.IsNullOrEmpty(request.BackupCode)
+                                                       && string.IsNullOrEmpty(request.TotpFallbackToken))
                 return _errorService.AuthError(ErrorCodes.MfaRequired);
-            
+
             if (!ValidateMfa(request, user))
                 return _errorService.BadReq(ErrorCodes.MfaRequired);
 
@@ -179,9 +191,10 @@ public class AuthController : ControllerBase
 
     private bool ValidateMfa(LoginRequest request, User user)
     {
-        // prevent both being used at once
+        // prevent two being used at once
         if (!string.IsNullOrWhiteSpace(request.TotpCode) &&
-            !string.IsNullOrWhiteSpace(request.BackupCode))
+            !string.IsNullOrWhiteSpace(request.BackupCode) &&
+            !string.IsNullOrEmpty(request.TotpFallbackToken))
             return false;
 
         // ---- TOTP ----
@@ -214,9 +227,26 @@ public class AuthController : ControllerBase
                 return false;
             }
         }
+        
+        // ---- TOTP Fallback ----
+        if (!string.IsNullOrEmpty(request.TotpFallbackToken) && !string.IsNullOrEmpty(user.TotpFallbackTokenHash))
+        {
+            if (user.TotpFallbackTokenExpiry == null || user.TotpFallbackTokenExpiry < DateTime.UtcNow)
+                return false;
+
+            var hashed = TokenService.HashToken(request.TotpFallbackToken);
+            if (!CryptographicOperations.FixedTimeEquals(
+                    Convert.FromBase64String(user.TotpFallbackTokenHash),
+                    Convert.FromBase64String(hashed)))
+                return false;
+
+            user.TotpFallbackTokenHash = null;
+            user.TotpFallbackTokenExpiry = null;
+            return true;
+        }
 
         // ---- Backup code ----
-        if (string.IsNullOrWhiteSpace(request.BackupCode))
+        if (string.IsNullOrWhiteSpace(request.BackupCode) || user.BackupCodes == null)
             return false;
 
         if (user.BackupCodes.Count == 0)

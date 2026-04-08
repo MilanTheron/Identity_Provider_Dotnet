@@ -3,7 +3,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Cryptography;
 using idp.Controllers.Requests.Totp;
+using idp.Controllers.Requests.Email;
 using idp.Models.Errors;
 using idp.Services;
 using idp.Data;
@@ -18,16 +20,19 @@ public class TotpController : ControllerBase
     private readonly AppDbContext _context;
     private readonly ErrorService _errorService;
     private readonly BackupCodeService _backUpCodeService;
+    private readonly SendEmailService _emailService;
     private readonly ILogger<TotpController> _logger;
 
-    public TotpController(AppDbContext context, ErrorService errorService, BackupCodeService backUpCodeService, ILogger<TotpController> logger) 
+    public TotpController(AppDbContext context, ErrorService errorService, BackupCodeService backUpCodeService, SendEmailService emailService, ILogger<TotpController> logger) 
     {
         _context = context;
         _errorService = errorService;
         _backUpCodeService = backUpCodeService;
         _logger = logger;
+        _emailService = emailService;
     }
     
+    // ====================== SETUP TOTP ======================
     [Authorize]
     [EnableRateLimiting("auth")]
     [HttpPost("setup-totp")]
@@ -111,11 +116,7 @@ public class TotpController : ControllerBase
             .Select(code => _backUpCodeService.HashBackupCode(code))
             .ToList();
 
-        _logger.LogInformation(
-            "Generated {Count} backup codes for user {UserId}",
-            plainCodes.Count,
-            user.Id
-        );
+        _logger.LogInformation("Generated {Count} backup codes for user {UserId}", plainCodes.Count, user.Id);
 
         await _context.SaveChangesAsync();
 
@@ -123,6 +124,67 @@ public class TotpController : ControllerBase
         {
             BackupCodes = plainCodes
         });
+    }
+    
+    // ====================== FALLBACK TOTP ======================
+    [Authorize]
+    [EnableRateLimiting("auth")]
+    [HttpPost("request-totp-fallback")]
+    public async Task<IActionResult> RequestTotpFallback()
+    {
+        var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+        if (string.IsNullOrEmpty(userId))
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
+        if (user == null)
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
+
+        var fallbackToken = TokenService.GenerateSecureToken();
+        user.TotpFallbackTokenHash = TokenService.HashToken(fallbackToken);
+        user.TotpFallbackTokenExpiry = DateTime.UtcNow.AddMinutes(15);
+
+        await _context.SaveChangesAsync();
+
+        // Send fallback token via email
+        await _emailService.SendEmail(user.Email, "Your fallback authentication code", $"Your fallback TOTP code is: <b>{fallbackToken}</b>. It expires in 15 minutes.");
+
+        _logger.LogInformation("Sent TOTP fallback token to user {UserId}", user.Id);
+        return Ok("Fallback token sent via email");
+    }
+    
+    [Authorize]
+    [EnableRateLimiting("auth")]
+    [HttpPost("verify-totp-fallback")]
+    public async Task<IActionResult> VerifyTotpFallback([FromBody] VerifyTotpFallbackRequest request)
+    {
+        var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+        if (string.IsNullOrEmpty(userId))
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
+        if (user == null)
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
+
+        if (string.IsNullOrEmpty(request.FallbackToken) || string.IsNullOrEmpty(user.TotpFallbackTokenHash))
+            return _errorService.BadReq(ErrorCodes.InvalidCode);
+
+        if (user.TotpFallbackTokenExpiry == null || user.TotpFallbackTokenExpiry < DateTime.UtcNow)
+            return _errorService.BadReq("fallback_token_expired");
+
+        var hashedToken = TokenService.HashToken(request.FallbackToken);
+
+        if (!CryptographicOperations.FixedTimeEquals(
+                Convert.FromBase64String(user.TotpFallbackTokenHash),
+                Convert.FromBase64String(hashedToken)))
+            return _errorService.BadReq("invalid_fallback_token");
+
+        // Mark fallback as used
+        user.TotpFallbackTokenHash = null;
+        user.TotpFallbackTokenExpiry = null;
+        await _context.SaveChangesAsync();
+
+        return Ok("Fallback verification successful");
     }
     
     private string GenerateTotpQrCode(string email, string secret)

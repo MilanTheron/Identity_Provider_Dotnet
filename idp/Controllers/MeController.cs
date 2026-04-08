@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using System.IdentityModel.Tokens.Jwt;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace idp.Controllers;
 
@@ -9,6 +10,7 @@ namespace idp.Controllers;
 public class MeController : ControllerBase
 {
     [Authorize]
+    [EnableRateLimiting("auth")]
     [HttpGet("me")]
     public IActionResult Me()
     {

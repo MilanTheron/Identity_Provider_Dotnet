@@ -5,6 +5,7 @@ namespace idp.Models;
 public class User
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid DeviceId { get; set; }
     
     [MaxLength(50)]
     public required string Email { get; set; } = string.Empty;
@@ -17,7 +18,7 @@ public class User
     public string PasswordResetTokenHash { get; set; } = string.Empty;
     public DateTime? PasswordResetTokenExpiry { get; set; }
 
-    public List<WebAuthnCredential> Credentials { get; set; }
+    public List<WebAuthnCredential>? Credentials { get; set; }
     [MaxLength(200)]
     public required string PasswordHash { get; set; } = string.Empty;
 
@@ -25,6 +26,9 @@ public class User
     public string TotpSecret { get; set; } = string.Empty;
     public bool IsTotpEnabled { get; set; }
     public long? LastTotpStepUsed { get; set; }
+    [MaxLength(200)]
+    public string? TotpFallbackTokenHash { get; set; }
+    public DateTime? TotpFallbackTokenExpiry { get; set; }
 
-    public List<string> BackupCodes { get; set; }
+    public List<string>? BackupCodes { get; set; }
 }
