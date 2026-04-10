@@ -24,22 +24,39 @@ public class WellKnownController : ControllerBase
         var config = new
         {
             issuer = issuer,
+            
+            //OAuth
             authorization_endpoint = $"{issuer}/api/oauth/authorize",
             token_endpoint = $"{issuer}/api/oauth/token",
             
+            // Webauthn
             webAuthnRegisterStart_endpoint = $"{issuer}/api/webauthn/register/start",
             webAuthnRegisterFinish_endpoint = $"{issuer}/api/webauthn/register/finish",
             webAuthnLoginStart_endpoint = $"{issuer}/api/webauthn/login/start",
             webAuthnLoginFinish_endpoint = $"{issuer}/api/webauthn/login/finish",
             
-            register_endpoint = $"{issuer}/api/register",
-            totp_endpoint = $"{issuer}/api/setup-totp",
-            login_endpoint =  $"{issuer}/api/login",
-            logout_endpoint = $"{issuer}/api/logout",
-            changePassword_endpoint = $"{issuer}/api/change-password",
-            userinfo_endpoint = $"{issuer}/api/me",
+            // Authentication
+            register_endpoint = $"{issuer}/api/auth/register",
+            login_endpoint =  $"{issuer}/api/auth/login",
+            logout_endpoint = $"{issuer}/api/auth/logout",
+            logout_session_endpoint = $"{issuer}/api/auth/logout/session",
             
-            jwks_uri = $"{issuer}/.well-known/jwks",
+            // Email
+            verify_email_endpoint = $"{issuer}/api/email/verify-email",
+            resend_verification_endpoint = $"{issuer}/api/email/resend-verification",
+            forgot_password_endpoint = $"{issuer}/api/email/forgot-password",
+            reset_password_endpoint = $"{issuer}/api/email/reset-password",
+            
+            // Me
+            userinfo_endpoint = $"{issuer}/api/me/me",
+            
+            // Totp
+            setup_totp_endpoint = $"{issuer}/api/totp/setup-totp",
+            verify_totp_endpoint = $"{issuer}/api/totp/verify-totp",
+            request_totp_fallback_endpoint = $"{issuer}/api/totp/request-totp-fallback",
+            verify_totp_fallback_endpoint = $"{issuer}/api/totp/verify-totp-fallback",
+            
+            jwks_uri = $"{issuer}/.well-known/jwks"
         };
         return Ok(config);
     }

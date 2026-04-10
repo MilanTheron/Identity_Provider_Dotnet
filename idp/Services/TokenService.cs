@@ -12,14 +12,16 @@ public class TokenService
 {
     private readonly IConfiguration _configuration;
     private readonly ILogger<TokenService> _logger;
+    private static byte[] _hmacKey;
 
     public TokenService(IConfiguration configuration, ILogger<TokenService> logger)
     {
         _configuration = configuration;
         _logger = logger;
+        _hmacKey = Convert.FromBase64String(configuration["Hmac:Key"]);
     }
 
-    public async Task<(string token, string jti)> GenerateJwtToken(User user, bool mfaVerified)
+    public async Task<(string token, string jti)> GenerateJwtToken(User user, bool mfaVerified, string scope, string clientId)
     {
         _logger.LogInformation("Generating JWT for user {UserId}, MFA: {Mfa}", user.Id, mfaVerified);
         
@@ -32,6 +34,8 @@ public class TokenService
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()), // user identity
             new Claim(JwtRegisteredClaimNames.Jti, jti), // token identity
             new Claim("email", user.Email),
+            new Claim("scope", scope),
+            new Claim("client_id", clientId),
             new Claim("email_verified", user.EmailVerified ? "true" : "false"),
             new Claim("mfa", mfaVerified ? "true" : "false"),
             new Claim(JwtRegisteredClaimNames.Iat,
@@ -47,7 +51,7 @@ public class TokenService
 
         var token = new JwtSecurityToken(
             issuer: _configuration["Jwt:Issuer"],
-            audience: _configuration["Jwt:Audience"],
+            audience: clientId,
             claims: claims,
             notBefore: now,
             expires: expiry,
@@ -58,7 +62,7 @@ public class TokenService
         return (new JwtSecurityTokenHandler().WriteToken(token), jti);
     }
     
-    public async Task<string> GenerateIdToken(User user)
+    public async Task<string> GenerateIdToken(User user, string clientId)
     {
         _logger.LogInformation("Generating ID token for user {UserId}", user.Id);
         
@@ -67,6 +71,7 @@ public class TokenService
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new Claim("email", user.Email),
+            new Claim("azp", clientId),
             new Claim("email_verified", user.EmailVerified ? "true" : "false"),
             new Claim(JwtRegisteredClaimNames.Iat, 
                 DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
@@ -81,7 +86,7 @@ public class TokenService
 
         var token = new JwtSecurityToken(
             issuer: _configuration["Jwt:Issuer"],
-            audience: _configuration["Jwt:Audience"],
+            audience: clientId,
             claims: claims,
             notBefore: now,
             expires: expiry,
@@ -100,8 +105,8 @@ public class TokenService
     
     public static string HashToken(string token)
     {
-        using var sha256 = SHA256.Create();
-        var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(token));
-        return WebEncoders.Base64UrlEncode(bytes);
+        using var hmac = new HMACSHA256(_hmacKey);
+        var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(token));
+        return Convert.ToBase64String(hash);
     }
 }

@@ -22,8 +22,91 @@ This document provides visual representations of all authentication and authoriz
 
 ---
 
-## 1. User Registration & Email Verification Flow
+## Summary Table: Request Types & Authentication
 
+```
+┌─────────────────────────────┬──────────────────┬──────────────────┐
+│ Request Type                │ Authorization    │ Authentication   │
+├─────────────────────────────┼──────────────────┼──────────────────┤
+│ POST /auth/register         │ Public           │ None             │
+│ POST /auth/login            │ Public           │ None             │
+│ POST /auth/logout/session   │ Cookie or JWT    │ Authenticated    │
+│ POST /webauthn/login/start  │ Public           │ None             │
+│ POST /webauthn/login/finish │ Public           │ None             │
+│ POST /webauthn/reg/start    │ JWT Required     │ Authenticated    │
+│ POST /webauthn/reg/finish   │ JWT Required     │ Authenticated    │
+│ GET  /email/verify-email    │ Public           │ None             │
+│ POST /email/resend-verify   │ Public           │ None             │
+│ POST /email/forgot-password │ Public           │ None             │
+│ POST /email/reset-password  │ Public           │ None             │
+│ GET  /oauth/authorize       │ Cookie Required  │ Session Needed   │
+│ POST /oauth/token           │ Public           │ None (PKCE)      │
+│ GET  /api/me                │ JWT or Cookie    │ Authenticated    │
+│ POST /api/totp/setup        │ JWT Required     │ Authenticated    │
+│ POST /api/token/refresh     │ Public           │ None (RT hash)   │
+└─────────────────────────────┴──────────────────┴──────────────────┘
+
+```
+
+## Implementation Checklist
+
+### ✅ Already Implemented
+
+```
+Authentication:
+✅ /api/auth/register - User registration
+✅ /api/auth/login - Password login with MFA support
+✅ /api/auth/logout/session - Session logout (NEW)
+✅ /api/auth/logout - Token logout + revoke
+
+WebAuthn:
+✅ /api/webauthn/register/start - Start registration
+✅ /api/webauthn/register/finish - Finish registration
+✅ /api/webauthn/login/start - Start login
+✅ /api/webauthn/login/finish - Finish login (session)
+
+Email & Recovery:
+✅ /api/email/verify-email - Verify email
+✅ /api/email/resend-verification - Resend verification
+✅ /api/email/forgot-password - Request password reset
+✅ /api/email/reset-password - Reset password + revoke tokens
+
+MFA:
+✅ TOTP setup & validation
+✅ Backup codes (recovery)
+✅ Fallback tokens
+✅ Rate limiting on auth attempts
+
+OAuth & JWT:
+✅ /api/oauth/authorize - Authorization code flow
+✅ /api/oauth/token - Token exchange (JWT + Refresh)
+✅ /api/token/refresh - Refresh JWT
+✅ SmartScheme - Cookie or JWT routing
+
+Authorization:
+✅ @[Authorize] - Requires authentication
+✅ @[Authorize(Policy="AdminOnly")] - Admin only
+✅ @[Authorize(Policy="RequireMfa")] - MFA required
+✅ @[Authorize(Policy="SensitiveOperation")] - Sensitive ops
+
+Security:
+✅ Password hashing (Argon2)
+✅ Token hashing (SHA256)
+✅ Secure random generation
+✅ Time-based comparison (prevents timing attacks)
+✅ HttpOnly cookies
+✅ Secure cookies (HTTPS only)
+✅ SameSite=Lax (CSRF protection)
+✅ JWT signature validation (RSA)
+✅ JTI validation (prevent token replay)
+✅ Email verification enforcement
+✅ Token expiry validation
+✅ User existence check
+```
+
+---
+
+## User Registration & Email Verification Flow
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                      REGISTRATION FLOW                          │
@@ -103,7 +186,7 @@ This document provides visual representations of all authentication and authoriz
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        LOGIN FLOW                               │
+│                   LOGIN FLOW (SESSION-BASED)                    │
 └─────────────────────────────────────────────────────────────────┘
 
 1. SUBMIT LOGIN CREDENTIALS
@@ -114,7 +197,6 @@ This document provides visual representations of all authentication and authoriz
           │ {
           │   email: "user@example.com"
           │   password: "MyPassword123!"
-          │   scope?: "openid profile email"  [Optional]
           │   totpCode?: "123456"             [If MFA enabled]
           │   backupCode?: "ABC123XYZ"        [If using backup]
           │ }
@@ -128,58 +210,162 @@ This document provides visual representations of all authentication and authoriz
    │ 5. If MFA enabled:                      │
    │    - Validate TOTP code OR              │
    │    - Validate & consume backup code     │
-   │ 6. Generate JWT + Refresh Token         │
+   │ 6. Create ClaimsPrincipal               │
+   │ 7. Sign in with cookie                  │
    └──────┬────────────────────────────────────┘
           │
           │ ✅ Login successful
           ↓
    ┌─────────────────────────────────────────┐
-   │ TokenService.GenerateJwtToken()         │
+   │ Create Session Cookie Claims:           │
    │                                         │
-   │ JWT Claims:                             │
-   │ - sub: user.Id                          │
-   │ - jti: unique_token_id                  │
-   │ - email: user.Email                     │
-   │ - mfa: true/false                       │
-   │ - email_verified: true/false            │
-   │ - iat: issue_time                       │
-   │ - exp: now + 30 minutes                 │
-   │ - iss: "IdpServer"                      │
-   │ - aud: "ServiceProviders"               │
+   │ var claims = new List<Claim>            │
+   │ {                                       │
+   │   new Claim("sub", user.Id.ToString()), │
+   │   new Claim("amr", "pwd"),              │
+   │   new Claim("mfa", mfaVerified ? "true" │
+   │             : "false")                  │
+   │ };                                      │
    │                                         │
-   │ Signed with: RSA private key (RS256)    │
+   │ var identity = new ClaimsIdentity(      │
+   │   claims, "AuthScheme"                  │
+   │ );                                      │
+   │ var principal = new ClaimsPrincipal(    │
+   │   identity                              │
+   │ );                                      │
+   │                                         │
+   │ await HttpContext.SignInAsync(          │
+   │   "AuthScheme", principal               │
+   │ );                                      │
    └──────┬────────────────────────────────────┘
           │
-          │ CREATE & STORE REFRESH TOKEN
-          ↓
-   ┌─────────────────────────────────────────┐
-   │ Create RefreshToken record              │
-   │ {                                       │
-   │   Token: SHA256(random_64_bytes)        │
-   │   JwtId: jti                            │
-   │   UserId: user.Id                       │
-   │   Scope: request.Scope                  │
-   │   ExpiryDate: now + 7 days              │
-   │   CreatedAt: now                        │
-   │   CreatedByIp: client_ip                │
-   │   MfaVerified: true/false               │
-   │   IsUsed: false                         │
-   │   IsRevoked: false                      │
-   │ }                                       │
-   └──────┬────────────────────────────────────┘
-          │ INSERT into RefreshTokens table
+          │ Set-Cookie header with:
+          │ - Name: .AspNetCore.Cookies
+          │ - HttpOnly: true (JS cannot access)
+          │ - Secure: true (HTTPS only)
+          │ - SameSite: Lax (CSRF protection)
+          │ - Path: /
+          │ - Expires: Session or 30 days
+          │
           ↓
    ┌─────────────────────────────────────────┐
    │ Return to Client:                       │
    │ {                                       │
-   │   "AccessToken": "eyJ...",              │
-   │   "RefreshToken": "base64_token",       │
-   │   "ExpiresIn": 1800,                    │
-   │   "TokenType": "Bearer"                 │
+   │   "message": "authenticated"            │
    │ }                                       │
+   │                                         │
+   │ Header: Set-Cookie: .AspNetCore...      │
    └─────────────────────────────────────────┘
 
-✅ LOGIN COMPLETE - User authenticated
+✅ LOGIN COMPLETE - Session Cookie Created
+   User is now authenticated for /oauth/authorize
+```
+
+---
+
+## 2b. WebAuthn Login Flow - Creates Session Cookie
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                WEBAUTHN LOGIN FLOW (BIOMETRIC)                  │
+│     (Preferred method when available - Face ID / Touch ID)      │
+└─────────────────────────────────────────────────────────────────┘
+
+1. START WEBAUTHN LOGIN
+   ┌──────────────┐
+   │ User         │
+   └──────┬───────┘
+          │ POST /api/webauthn/login/start
+          │ { email: "user@example.com" }
+          ↓
+   ┌──────────────────────────────────────┐
+   │ WebAuthnController.StartWebAuthnLogin()
+   │ [AllowAnonymous]                     │
+   │                                      │
+   │ 1. Find user by email                │
+   │ 2. Get WebAuthn credentials list     │
+   │ 3. If no credentials:                │
+   │    Return empty {}                   │
+   │    (Frontend offers password fallback)
+   │ 4. Generate challenge (32 bytes)     │
+   │ 5. Return options with:              │
+   │    - challenge                       │
+   │    - allowCredentials                │
+   │    - timeout: 60000ms                │
+   │    - userVerification: preferred     │
+   └──────┬────────────────────────────────┘
+          │
+          │ Return:
+          ├─ If credentials exist:
+          │  { challenge, allowCredentials, ... }
+          │
+          └─ If NO credentials:
+             {} (empty response)
+          
+          ↓
+   ┌──────────────────────────────────────┐
+   │ Browser: Prompts for Biometric       │
+   │ (Face ID / Windows Hello / YubiKey)  │
+   │                                      │
+   │ User: Authenticates with biometric   │
+   │                                      │
+   │ Device: Signs challenge with private │
+   │ key stored in authenticator          │
+   └──────┬────────────────────────────────┘
+          │
+          │ POST /api/webauthn/login/finish
+          │ {
+          │   clientResponse: {
+          │     id: credential_id,
+          │     type: "public-key",
+          │     response: {
+          │       authenticatorData: base64,
+          │       clientDataJSON: base64,
+          │       signature: base64
+          │     }
+          │   }
+          │ }
+          ↓
+   ┌──────────────────────────────────────┐
+   │ WebAuthnController.FinishWebAuthnLogin()
+   │ [AllowAnonymous]                     │
+   │                                      │
+   │ 1. Decode credential ID              │
+   │ 2. Find stored credential by ID      │
+   │ 3. Find user by credential           │
+   │ 4. Validate signature:               │
+   │    - Fetch stored public key         │
+   │    - Verify signature matches        │
+   │    - Check authenticator data        │
+   │    - Verify user presence flag       │
+   │ 5. Create ClaimsPrincipal            │
+   │ 6. Sign in with cookie               │
+   └──────┬────────────────────────────────┘
+          │
+          │ ✅ Signature valid
+          │
+          │ Create Session Cookie Claims:
+          │ var claims = new List<Claim>
+          │ {
+          │   new Claim("sub", user.Id),
+          │   new Claim("amr", "webauthn")
+          │ };
+          │
+          │ await HttpContext.SignInAsync(
+          │   "AuthScheme", principal
+          │ );
+          ↓
+   ┌──────────────────────────────────────┐
+   │ Return to Client:                    │
+   │ {                                    │
+   │   "message": "authenticated"         │
+   │ }                                    │
+   │                                      │
+   │ Header: Set-Cookie: .AspNetCore...   │
+   └──────────────────────────────────────┘
+
+✅ WEBAUTHN LOGIN COMPLETE - Session Cookie Created
+   User is now authenticated for /oauth/authorize
 ```
 
 ---
@@ -189,12 +375,16 @@ This document provides visual representations of all authentication and authoriz
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │            OAUTH2 AUTHORIZATION CODE FLOW WITH PKCE             │
+│    (User must first be authenticated via session cookie)        │
 └─────────────────────────────────────────────────────────────────┘
 
 1. CLIENT INITIATES AUTHORIZATION
    ┌──────────────┐
    │ OAuth Client │ (e.g., React App)
    └──────┬───────┘
+          │
+          │ User must be authenticated first!
+          │ (Via login or webauthn - creates session)
           │
           │ Generate PKCE
           ├─ code_verifier = random(43-128 chars)
@@ -212,30 +402,34 @@ This document provides visual representations of all authentication and authoriz
           │    code_challenge_method=S256
           ↓
    ┌─────────────────────────────────────────┐
-   │ User: Redirected to IDP Login           │
-   │ (If not already logged in)              │
+   │ IDP: Check Session Cookie               │
    │                                         │
-   │ Follow LOGIN FLOW (step 2)              │
-   │ Get: AccessToken + RefreshToken        │
-   └─────────────────────────────────────────┘
-
-2. IDP AUTHORIZATION ENDPOINT
-   ┌────────────────────────────────────────┐
-   │ GET /api/oauth/authorize               │
-   │ [AllowAnonymous                        │
-   │                                        │
-   │ 1. Validate user is authenticated      │
-   │ 2. Validate client_id exists           │
-   │ 3. Validate redirect_uri matches       │
-   │ 4. Validate response_type == "code"    │
-   │ 5. Validate state present              │
-   │ 6. Validate code_challenge:            │
-   │    - Format: [A-Za-z0-9\-_]+           │
-   │    - Length: 43-128 chars              │
-   │ 7. Validate method == "S256"           │
-   │ 8. Generate authorization code         │
-   │ 9. Store AuthorizationCode record      │
-   │ 10. Redirect back with code + state    │
+   │ If NO session:                          │
+   │ → Redirect to /login                    │
+   │                                         │
+   │ If session exists:                      │
+   │ → Continue to authorize endpoint        │
+   └──────┬────────────────────────────────────┘
+          │
+          ↓
+   ┌─────────────────────────────────────────┐
+   │ IDP AUTHORIZATION ENDPOINT              │
+   │ GET /api/oauth/authorize                │
+   │ [Authorize] - Requires session          │
+   │                                         │
+   │ 1. Validate user is authenticated       │
+   │    (from session cookie)                │
+   │ 2. Validate client_id exists            │
+   │ 3. Validate redirect_uri matches        │
+   │ 4. Validate response_type == "code"     │
+   │ 5. Validate state present               │
+   │ 6. Validate code_challenge:             │
+   │    - Format: [A-Za-z0-9\-_]+            │
+   │    - Length: 43-128 chars               │
+   │ 7. Validate method == "S256"            │
+   │ 8. Generate authorization code          │
+   │ 9. Store AuthorizationCode record       │
+   │ 10. Redirect back with code + state     │
    └────────┬─────────────────────────────────┘
             │
             │ CREATE AuthorizationCode:
@@ -245,7 +439,7 @@ This document provides visual representations of all authentication and authoriz
             ├─ code_challenge: from request
             ├─ code_challenge_method: "S256"
             ├─ user_id: authenticated_user_id
-            ├─ scope: request.scope ← 🟡 NOT STORED! Missing scope field
+            ├─ scope: request.scope
             ├─ expires_at: now + 5 minutes
             └─ used: false
             │
@@ -274,10 +468,12 @@ This document provides visual representations of all authentication and authoriz
           │   client_id: my-app
           │   redirect_uri: http://localhost:3000/callback
           │   code_verifier: ORIGINAL_VERIFIER
+          │   scope: "openid profile email"
           │ }
           ↓
    ┌──────────────────────────────────────┐
    │ OAuthController.Token()              │
+   │ [AllowAnonymous]                     │
    │                                      │
    │ 1. Validate grant_type == "auth_code"│
    │ 2. Find AuthorizationCode by code    │
@@ -289,7 +485,7 @@ This document provides visual representations of all authentication and authoriz
    │    b. Compare with code_challenge    │
    │    c. Use constant-time compare      │
    │ 7. Check user exists & email verified│
-   │ 8. Generate JWT + ID Token (missing!)│
+   │ 8. Generate JWT + ID Token           │
    │ 9. Generate new refresh token        │
    │ 10. Mark auth code as used           │
    │ 11. Return tokens                    │
@@ -300,7 +496,7 @@ This document provides visual representations of all authentication and authoriz
    ┌──────────────────────────────────────┐
    │ {                                    │
    │   "access_token": "eyJ...",          │
-   │   "id_token": "eyJ...",     ← Missing│
+   │   "id_token": "eyJ...",              │
    │   "refresh_token": "base64",         │
    │   "token_type": "Bearer",            │
    │   "expires_in": 1800                 │
@@ -308,6 +504,7 @@ This document provides visual representations of all authentication and authoriz
    └──────────────────────────────────────┘
 
 ✅ OAUTH2 FLOW COMPLETE
+   Client now has JWT tokens for API access
 ```
 
 ---

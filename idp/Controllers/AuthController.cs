@@ -2,7 +2,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.Authentication;
 using System.Security.Cryptography;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using OtpNet;
 using idp.Data;
 using idp.Models;
@@ -17,7 +20,6 @@ namespace idp.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly AppDbContext _context;
-    private readonly TokenService _tokenService;
     private readonly ErrorService _errorService;
     private readonly PasswordService _passwordService;
     private readonly BackupCodeService _backupCodeService;
@@ -25,16 +27,14 @@ public class AuthController : ControllerBase
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
-        AppDbContext context, 
-        TokenService tokenService, 
-        ErrorService errorService, 
-        PasswordService passwordService, 
-        BackupCodeService backupCodeService, 
+        AppDbContext context,
+        ErrorService errorService,
+        PasswordService passwordService,
+        BackupCodeService backupCodeService,
         SendEmailService emailService,
         ILogger<AuthController> logger)
     {
         _context = context;
-        _tokenService = tokenService;
         _errorService = errorService;
         _passwordService = passwordService;
         _backupCodeService = backupCodeService;
@@ -110,9 +110,7 @@ public class AuthController : ControllerBase
             .SingleOrDefaultAsync(u => u.Email == request.Email);
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
-
-        var scope = request.Scope ?? "openid profile email";
-
+        
         if (!user.EmailVerified || string.IsNullOrEmpty(request.Password))
             return _errorService.AuthError(ErrorCodes.InvalidCredentials);
         
@@ -134,32 +132,29 @@ public class AuthController : ControllerBase
             mfaVerified = true;
         }
 
-        // Generate tokens
-        var (accessToken, jti) = await _tokenService.GenerateJwtToken(user, mfaVerified);
-        var refreshTokenValue = TokenService.GenerateSecureToken();
-        var refreshTokenHash = TokenService.HashToken(refreshTokenValue);
-
-        var refreshToken = new RefreshToken
+        var claims = new List<Claim>
         {
-            Token = refreshTokenHash,
-            JwtId = jti,
-            Scope = scope,
-            UserId = user.Id.ToString(),
-
-            ExpiryDate = DateTime.UtcNow.AddDays(7),
-
-            CreatedAt = DateTime.UtcNow,
-            CreatedByIp = clientIp,
-
-            MfaVerified = mfaVerified,
-            IsUsed = false,
-            IsRevoked = false
+            new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+            new Claim("amr", "pwd"),
+            new Claim("mfa", mfaVerified ? "true" : "false")
         };
-        
-        _context.Add(refreshToken);
+
+        var identity = new ClaimsIdentity(claims, "AuthScheme");
+        var principal = new ClaimsPrincipal(identity);
+
+        await HttpContext.SignInAsync("AuthScheme", principal);
         await _context.SaveChangesAsync();
 
-        return Ok(new { AccessToken = accessToken, RefreshToken = refreshTokenValue });
+        return Ok(new { message = "authenticated" });
+    }
+
+    [Authorize]
+    [EnableRateLimiting("auth")]
+    [HttpPost("logout/session")]
+    public async Task<IActionResult> LogoutSession()
+    {
+        await HttpContext.SignOutAsync("AuthScheme");
+        return Ok(new { message = "logged out" });
     }
 
     [Authorize]

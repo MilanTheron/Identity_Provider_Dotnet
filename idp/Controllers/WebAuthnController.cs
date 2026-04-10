@@ -3,9 +3,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.Authentication;
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using idp.Controllers.Requests.WebAuthn;
-using idp.Models;
 using idp.Services;
 using idp.Models.Errors;
 using idp.Data;
@@ -18,19 +19,17 @@ public class WebAuthnController : ControllerBase
 {
     private readonly WebAuthnService _webAuthnService;
     private readonly AppDbContext _context;
-    private readonly TokenService _tokenService;
     private readonly ErrorService _errorService;
 
-    public WebAuthnController(AppDbContext context, WebAuthnService webAuthnService, TokenService tokenService, ErrorService errorService) {
+    public WebAuthnController(AppDbContext context, WebAuthnService webAuthnService, ErrorService errorService) {
         _context = context;
         _webAuthnService = webAuthnService;
-        _tokenService = tokenService;
         _errorService = errorService;
     }
 
     [Authorize]
     [EnableRateLimiting("auth")]
-    [HttpPost("webauthn/register/start")]
+    [HttpPost("register/start")]
     public async Task<IActionResult> StartWebAuthnRegister()
     {
         var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
@@ -45,10 +44,10 @@ public class WebAuthnController : ControllerBase
 
         return Ok(options);
     }
-    
+
     [Authorize]
     [EnableRateLimiting("auth")]
-    [HttpPost("webauthn/register/finish")]
+    [HttpPost("register/finish")]
     public async Task<IActionResult> FinishWebAuthnRegister([FromBody] WebAuthnRegisterFinishRequest request)
     {
         var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
@@ -77,7 +76,7 @@ public class WebAuthnController : ControllerBase
 
     [AllowAnonymous]
     [EnableRateLimiting("auth")]
-    [HttpPost("webauthn/login/start")]
+    [HttpPost("login/start")]
     public async Task<IActionResult> StartWebAuthnLogin([FromBody] WebAuthnLoginRequest request)
     {
         if (string.IsNullOrEmpty(request.Email))
@@ -102,7 +101,7 @@ public class WebAuthnController : ControllerBase
 
     [AllowAnonymous]
     [EnableRateLimiting("auth")]
-    [HttpPost("webauthn/login/finish")]
+    [HttpPost("login/finish")]
     public async Task<IActionResult> FinishWebAuthnLogin([FromBody] WebAuthnLoginFinishRequest request)
     {
         byte[] credentialIdBytes;
@@ -139,25 +138,18 @@ public class WebAuthnController : ControllerBase
             if (!success)
                 return _errorService.AuthError(ErrorCodes.Unauthorized);
 
-            var (accessToken, jti) = await _tokenService.GenerateJwtToken(user, false);
-            var refreshTokenValue = TokenService.GenerateSecureToken();
-
-            var refreshToken = new RefreshToken
+            var claims = new List<Claim>
             {
-                Token = TokenService.HashToken(refreshTokenValue),
-                JwtId = jti,
-                UserId = user.Id.ToString(),
-                ExpiryDate = DateTime.UtcNow.AddDays(7)
+                new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+                new Claim("amr", "webauthn")
             };
 
-            _context.Add(refreshToken);
-            await _context.SaveChangesAsync();
+            var identity = new ClaimsIdentity(claims, "AuthScheme");
+            var principal = new ClaimsPrincipal(identity);
 
-            return Ok(new
-            {
-                AccessToken = accessToken,
-                RefreshToken = refreshTokenValue
-            });
+            await HttpContext.SignInAsync("AuthScheme", principal);
+
+            return Ok(new { message = "authenticated" });
         }
         catch
         {

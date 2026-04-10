@@ -11,17 +11,18 @@ public class RefreshToken
     public string JwtId { get; set; } = string.Empty;
     public DateTime ExpiryDate { get; set; }
     public bool IsRevoked { get; set; } = false;
+    public Guid UserId { get; set; }
     [MaxLength(25)]
-    public string UserId { get; set; } = string.Empty;
+    public string ClientId { get; set; } = string.Empty;
     [MaxLength(150)]
     public string ReplacedByToken { get; set; } = string.Empty;
     public bool IsUsed { get; set; }
     public bool MfaVerified { get; set; }
     public DateTime CreatedAt { get; set; }
     [MaxLength(20)]
-    public string CreatedByIp { get; set; } = string.Empty;
+    public string? CreatedByIp { get; set; }
     [MaxLength(20)]
-    public string RevokedByIp { get; set; } = string.Empty;
+    public string? RevokedByIp { get; set; }
     [MaxLength(15)]
-    public string Scope { get; set; } = string.Empty;
+    public string? Scope { get; set; }
 }

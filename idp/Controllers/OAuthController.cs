@@ -30,7 +30,7 @@ public class OAuthController : ControllerBase
         _errorService = errorService;
     }
 
-    [AllowAnonymous]
+    [Authorize]
     [EnableRateLimiting("auth")]
     [HttpGet("authorize")]
     public async Task<IActionResult> Authorize([FromQuery] AuthorizeRequest request)
@@ -62,6 +62,23 @@ public class OAuthController : ControllerBase
         if (string.IsNullOrEmpty(request.CodeChallenge) || request.CodeChallengeMethod != "S256")
             return BadRequest(new { error = "invalid_pkce" });
 
+        var allowedScopes = client.AllowedScopes;
+
+        var requestedScopes = (request.Scope ?? "")
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        if (requestedScopes.Any(s => !allowedScopes.Contains(s)))
+            return _errorService.BadReq("invalid_scope");
+
+        if (string.IsNullOrEmpty(request.Scope))
+            return BadRequest(new { error = "invalid_scope" });
+
+        if (string.IsNullOrEmpty(request.ClientId))
+            return _errorService.BadReq(ErrorCodes.InvalidRequest);
+
+        if (string.IsNullOrEmpty(request.RedirectUri))
+            return BadRequest(new { error = "invalid_RedirectUri" });
+        
         var code = TokenService.GenerateSecureToken();
 
         var authCode = new AuthorizationCode
@@ -99,7 +116,7 @@ public class OAuthController : ControllerBase
         if (client == null)
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
 
-        if (string.IsNullOrEmpty(request.Code))
+        if (string.IsNullOrEmpty(request.Code) || string.IsNullOrEmpty(request.Scope))
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
         
         var authCode = await _context.AuthorizationCodes
@@ -112,7 +129,8 @@ public class OAuthController : ControllerBase
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
 
         if (!string.IsNullOrEmpty(request.Scope) && 
-            request.Scope != authCode.Scope)
+            request.Scope != authCode.Scope &&
+            !client.AllowedScopes.Contains(request.Scope))
             return _errorService.BadReq("invalid_scope");
 
         // PKCE
@@ -128,7 +146,7 @@ public class OAuthController : ControllerBase
 
         if (!CryptographicOperations.FixedTimeEquals(
                 Encoding.UTF8.GetBytes(hashed),
-                Encoding.UTF8.GetBytes(authCode.CodeChallenge!)))
+                Encoding.UTF8.GetBytes(authCode.CodeChallenge)))
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
         
         var user = await _context.Users
@@ -148,14 +166,14 @@ public class OAuthController : ControllerBase
 
             authCode.Used = true;
 
-            (accessToken, var jti) = await _tokenService.GenerateJwtToken(user, false);
+            (accessToken, var jti) = await _tokenService.GenerateJwtToken(user, false, request.Scope, request.ClientId);
             refreshTokenValue = TokenService.GenerateSecureToken();
 
             var refreshToken = new RefreshToken
             {
                 Token = TokenService.HashToken(refreshTokenValue),
                 JwtId = jti,
-                UserId = user.Id.ToString(),
+                UserId = user.Id,
                 ExpiryDate = DateTime.UtcNow.AddDays(7)
             };
 
@@ -170,7 +188,7 @@ public class OAuthController : ControllerBase
             throw;
         }
 
-        var idToken = await _tokenService.GenerateIdToken(user);
+        var idToken = await _tokenService.GenerateIdToken(user, request.ClientId);
 
         return Ok(new
         {

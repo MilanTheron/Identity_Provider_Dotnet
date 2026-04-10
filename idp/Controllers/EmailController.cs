@@ -143,7 +143,7 @@ public class EmailController : ControllerBase
         user.PasswordResetTokenExpiry = null;
 
         // revoke all sessions
-        var tokens = await _context.RefreshTokens.Where(rt => rt.UserId == user.Id.ToString() && !rt.IsRevoked).ToListAsync();
+        var tokens = await _context.RefreshTokens.Where(rt => rt.UserId == user.Id && !rt.IsRevoked).ToListAsync();
         foreach (var t in tokens)
         {
             t.IsRevoked = true;

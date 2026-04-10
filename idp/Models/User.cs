@@ -8,22 +8,22 @@ public class User
     public Guid DeviceId { get; set; }
     
     [MaxLength(50)]
-    public required string Email { get; set; } = string.Empty;
+    public required string Email { get; set; }
     public bool EmailVerified { get; set; }
     [MaxLength(200)]
-    public string EmailVerificationTokenHash { get; set; } = string.Empty;
+    public string? EmailVerificationTokenHash { get; set; }
     public DateTime? EmailVerificationTokenExpiry { get; set; }
 
     [MaxLength(200)]
-    public string PasswordResetTokenHash { get; set; } = string.Empty;
+    public string? PasswordResetTokenHash { get; set; }
     public DateTime? PasswordResetTokenExpiry { get; set; }
 
     public List<WebAuthnCredential>? Credentials { get; set; }
     [MaxLength(200)]
-    public required string PasswordHash { get; set; } = string.Empty;
+    public required string PasswordHash { get; set; }
 
     [MaxLength(30)]
-    public string TotpSecret { get; set; } = string.Empty;
+    public string? TotpSecret { get; set; }
     public bool IsTotpEnabled { get; set; }
     public long? LastTotpStepUsed { get; set; }
     [MaxLength(200)]
