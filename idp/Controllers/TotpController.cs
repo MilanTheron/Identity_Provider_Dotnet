@@ -21,15 +21,17 @@ public class TotpController : ControllerBase
     private readonly ErrorService _errorService;
     private readonly BackupCodeService _backUpCodeService;
     private readonly SendEmailService _emailService;
+    private readonly TokenService _tokenService;
     private readonly ILogger<TotpController> _logger;
 
-    public TotpController(AppDbContext context, ErrorService errorService, BackupCodeService backUpCodeService, SendEmailService emailService, ILogger<TotpController> logger) 
+    public TotpController(AppDbContext context, ErrorService errorService, BackupCodeService backUpCodeService, TokenService tokenService, SendEmailService emailService, ILogger<TotpController> logger) 
     {
         _context = context;
         _errorService = errorService;
         _backUpCodeService = backUpCodeService;
-        _logger = logger;
+        _tokenService = tokenService;
         _emailService = emailService;
+        _logger = logger;
     }
     
     // ====================== SETUP TOTP ======================
@@ -42,8 +44,10 @@ public class TotpController : ControllerBase
         if (string.IsNullOrEmpty(userId))
             return _errorService.AuthError(ErrorCodes.Unauthorized);
         
-        var user = await _context.Users
-            .FirstOrDefaultAsync(u => u.Id.ToString() == userId);
+        if (!Guid.TryParse(userId, out var guid))
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == guid);
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
         
@@ -78,8 +82,10 @@ public class TotpController : ControllerBase
         if (string.IsNullOrEmpty(userId))
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
-        var user = await _context.Users
-            .FirstOrDefaultAsync(u => u.Id.ToString() == userId);
+        if (!Guid.TryParse(userId, out var guid))
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == guid);
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
@@ -136,12 +142,15 @@ public class TotpController : ControllerBase
         if (string.IsNullOrEmpty(userId))
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
+        if (!Guid.TryParse(userId, out var guid))
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == guid);
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         var fallbackToken = TokenService.GenerateSecureToken();
-        user.TotpFallbackTokenHash = TokenService.HashToken(fallbackToken);
+        user.TotpFallbackTokenHash = _tokenService.HashToken(fallbackToken);
         user.TotpFallbackTokenExpiry = DateTime.UtcNow.AddMinutes(15);
 
         await _context.SaveChangesAsync();
@@ -162,7 +171,10 @@ public class TotpController : ControllerBase
         if (string.IsNullOrEmpty(userId))
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
+        if (!Guid.TryParse(userId, out var guid))
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == guid);
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
@@ -172,7 +184,7 @@ public class TotpController : ControllerBase
         if (user.TotpFallbackTokenExpiry == null || user.TotpFallbackTokenExpiry < DateTime.UtcNow)
             return _errorService.BadReq("fallback_token_expired");
 
-        var hashedToken = TokenService.HashToken(request.FallbackToken);
+        var hashedToken = _tokenService.HashToken(request.FallbackToken);
 
         if (!CryptographicOperations.FixedTimeEquals(
                 Convert.FromBase64String(user.TotpFallbackTokenHash),

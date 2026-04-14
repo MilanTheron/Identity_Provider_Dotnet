@@ -5,7 +5,7 @@ namespace idp.Models;
 public class User
 {
     public Guid Id { get; set; } = Guid.NewGuid();
-    public Guid DeviceId { get; set; }
+    public Device? Device { get; set; }
     
     [MaxLength(50)]
     public required string Email { get; set; }

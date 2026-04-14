@@ -12,13 +12,26 @@ public class TokenService
 {
     private readonly IConfiguration _configuration;
     private readonly ILogger<TokenService> _logger;
-    private static byte[] _hmacKey;
+    private readonly byte[] _hmacKey;
 
     public TokenService(IConfiguration configuration, ILogger<TokenService> logger)
     {
         _configuration = configuration;
         _logger = logger;
-        _hmacKey = Convert.FromBase64String(configuration["Hmac:Key"]);
+
+        var keyString = configuration["Hmac:Key"];
+
+        if (string.IsNullOrWhiteSpace(keyString))
+            throw new Exception("Hmac:Key is missing");
+
+        try
+        {
+            _hmacKey = Convert.FromBase64String(keyString);
+        }
+        catch (FormatException)
+        {
+            throw new Exception("Hmac:Key is not valid Base64");
+        }
     }
 
     public async Task<(string token, string jti)> GenerateJwtToken(User user, bool mfaVerified, string scope, string clientId)
@@ -103,7 +116,7 @@ public class TokenService
         return WebEncoders.Base64UrlEncode(randomNumber);
     }
     
-    public static string HashToken(string token)
+    public string HashToken(string token)
     {
         using var hmac = new HMACSHA256(_hmacKey);
         var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(token));

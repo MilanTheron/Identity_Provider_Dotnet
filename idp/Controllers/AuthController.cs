@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication;
 using System.Security.Cryptography;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Text;
 using OtpNet;
 using idp.Data;
 using idp.Models;
@@ -24,14 +25,18 @@ public class AuthController : ControllerBase
     private readonly PasswordService _passwordService;
     private readonly BackupCodeService _backupCodeService;
     private readonly SendEmailService _emailService;
+    private readonly TokenService _tokenService;
+    private readonly LoginDelayService _delayService;
     private readonly ILogger<AuthController> _logger;
-
+    
     public AuthController(
         AppDbContext context,
         ErrorService errorService,
         PasswordService passwordService,
         BackupCodeService backupCodeService,
         SendEmailService emailService,
+        TokenService tokenService,
+        LoginDelayService delayService,
         ILogger<AuthController> logger)
     {
         _context = context;
@@ -39,6 +44,8 @@ public class AuthController : ControllerBase
         _passwordService = passwordService;
         _backupCodeService = backupCodeService;
         _emailService = emailService;
+        _tokenService = tokenService;
+        _delayService = delayService;
         _logger = logger;
     }
 
@@ -47,6 +54,8 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
+        _logger.LogInformation("Email: {Email}, Password: {Password}", request.Email, request.Password);
+        
         if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Password))
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
         
@@ -63,11 +72,10 @@ public class AuthController : ControllerBase
             Location = null,
             LastUsed = DateTime.UtcNow
         };
-        _context.Devices.Add(device);
         
         var user = new User
         {
-            DeviceId = device.Id,
+            Device = device,
             Email = request.Email,
             PasswordHash = _passwordService.HashPassword(request.Password),
             EmailVerified = false,
@@ -76,23 +84,29 @@ public class AuthController : ControllerBase
         };
     
         var rawToken = TokenService.GenerateSecureToken();
-        user.EmailVerificationTokenHash = TokenService.HashToken(rawToken);
+        user.EmailVerificationTokenHash = _tokenService.HashToken(rawToken);
         user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24);
-
-        var verifyUrl = $"{Request.Scheme}://{Request.Host}/api/email/verify-email?token={rawToken}&userId={user.Id}";
-
+        
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+        
+        var verifyUrl =
+            $"{Request.Scheme}://{Request.Host}/api/email/verify-email" +
+            $"?token={Uri.EscapeDataString(rawToken)}&userId={user.Id}";
+        _logger.LogInformation("Verify URL: {Url}", verifyUrl);
+        
         try
         {
-            await _emailService.SendEmail(user.Email, "Verify your email", $"Click to verify: <a href='{verifyUrl}'>link</a>");
+            await _emailService.SendEmail(
+                user.Email,
+                "Verify your email",
+                verifyUrl);
             _logger.LogInformation("Verification email sent to {Email}", user.Email);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send verification email to {Email}", user.Email);
         }
-
-        _context.Users.Add(user);
-        await _context.SaveChangesAsync();
 
         return Ok("User registered. If the email exists, a verification email has been sent.");
     }
@@ -106,28 +120,54 @@ public class AuthController : ControllerBase
         if (clientIp == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
-        var user = await _context.Users
-            .SingleOrDefaultAsync(u => u.Email == request.Email);
-        if (user == null)
-            return _errorService.AuthError(ErrorCodes.Unauthorized);
-        
-        if (!user.EmailVerified || string.IsNullOrEmpty(request.Password))
-            return _errorService.AuthError(ErrorCodes.InvalidCredentials);
-        
-        if (!_passwordService.VerifyPassword(request.Password, user.PasswordHash))
-            return _errorService.AuthError(ErrorCodes.InvalidCredentials);
+        var email = request.Email?.Trim().ToLowerInvariant() ?? "invalid";
+        var ua = Request.Headers["User-Agent"].ToString();
+        var key = $"{clientIp}:{email}:{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(ua)))}";
 
-        // Password correct, now check MFA if enabled
+        var user = await _context.Users
+            .SingleOrDefaultAsync(u => u.Email == email);
+
+        var password = request.Password ?? "Fake";
+
+        if (user == null)
+        {
+            _delayService.RegisterFailure(key);
+            await _delayService.ApplyDelayAsync(key);
+            return _errorService.AuthError(ErrorCodes.InvalidCredentials);
+        }
+
+        var passwordValid = _passwordService.VerifyPassword(password, user.PasswordHash);
+
+        if (!passwordValid)
+        {
+            _delayService.RegisterFailure(key);
+            await _delayService.ApplyDelayAsync(key);
+            return _errorService.AuthError(ErrorCodes.InvalidCredentials);
+        }
+
+        // Reset delay on correct password
+        _delayService.Reset(key);
+
+        // ---- MFA ----
         var mfaVerified = false;
 
         if (user.IsTotpEnabled)
         {
-            if (string.IsNullOrEmpty(request.TotpCode) && string.IsNullOrEmpty(request.BackupCode)
-                                                       && string.IsNullOrEmpty(request.TotpFallbackToken))
+            if (string.IsNullOrEmpty(request.TotpCode) &&
+                string.IsNullOrEmpty(request.BackupCode) &&
+                string.IsNullOrEmpty(request.TotpFallbackToken))
+            {
+                _delayService.RegisterFailure(key);
+                await _delayService.ApplyDelayAsync(key);
                 return _errorService.AuthError(ErrorCodes.MfaRequired);
+            }
 
             if (!ValidateMfa(request, user))
-                return _errorService.BadReq(ErrorCodes.MfaRequired);
+            {
+                _delayService.RegisterFailure(key);
+                await _delayService.ApplyDelayAsync(key);
+                return _errorService.AuthError(ErrorCodes.MfaRequired);
+            }
 
             mfaVerified = true;
         }
@@ -143,7 +183,6 @@ public class AuthController : ControllerBase
         var principal = new ClaimsPrincipal(identity);
 
         await HttpContext.SignInAsync("AuthScheme", principal);
-        await _context.SaveChangesAsync();
 
         return Ok(new { message = "authenticated" });
     }
@@ -169,7 +208,7 @@ public class AuthController : ControllerBase
         if (string.IsNullOrEmpty(request.RefreshToken))
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
         
-        var requestHash = TokenService.HashToken(request.RefreshToken);
+        var requestHash = _tokenService.HashToken(request.RefreshToken);
         var storedToken = await _context.RefreshTokens
             .SingleOrDefaultAsync(rt => rt.Token == requestHash);
 
@@ -229,7 +268,8 @@ public class AuthController : ControllerBase
             if (user.TotpFallbackTokenExpiry == null || user.TotpFallbackTokenExpiry < DateTime.UtcNow)
                 return false;
 
-            var hashed = TokenService.HashToken(request.TotpFallbackToken);
+            var hashed = _tokenService.HashToken(request.TotpFallbackToken);
+            
             if (!CryptographicOperations.FixedTimeEquals(
                     Convert.FromBase64String(user.TotpFallbackTokenHash),
                     Convert.FromBase64String(hashed)))

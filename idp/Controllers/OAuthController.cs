@@ -149,8 +149,10 @@ public class OAuthController : ControllerBase
                 Encoding.UTF8.GetBytes(authCode.CodeChallenge)))
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
         
-        var user = await _context.Users
-            .FirstOrDefaultAsync(u => u.Id.ToString() == authCode.UserId);
+        if (!Guid.TryParse(authCode.UserId, out var guid))
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == guid);
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
@@ -171,7 +173,7 @@ public class OAuthController : ControllerBase
 
             var refreshToken = new RefreshToken
             {
-                Token = TokenService.HashToken(refreshTokenValue),
+                Token = _tokenService.HashToken(refreshTokenValue),
                 JwtId = jti,
                 UserId = user.Id,
                 ExpiryDate = DateTime.UtcNow.AddDays(7)

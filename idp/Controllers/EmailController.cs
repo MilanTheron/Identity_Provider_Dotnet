@@ -18,14 +18,16 @@ public class EmailController : ControllerBase
     private readonly ErrorService _errorService;
     private readonly ILogger<EmailController> _logger;
     private readonly SendEmailService _emailService;
+    private readonly TokenService _tokenService;
     private readonly PasswordService _passwordService;
 
-    public EmailController(AppDbContext context, ErrorService errorService, ILogger<EmailController> logger, SendEmailService emailService, PasswordService passwordService)
+    public EmailController(AppDbContext context, ErrorService errorService, ILogger<EmailController> logger, SendEmailService emailService, TokenService tokenService, PasswordService passwordService)
     {
         _context = context;
         _errorService = errorService;
         _logger = logger;
         _emailService = emailService;
+        _tokenService = tokenService;
         _passwordService = passwordService;
     }
 
@@ -34,7 +36,11 @@ public class EmailController : ControllerBase
     [HttpGet("verify-email")]
     public async Task<IActionResult> VerifyEmail([FromQuery] string token, [FromQuery] string userId)
     {
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id.ToString() == userId);
+        if (!Guid.TryParse(userId, out var guid))
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == guid);
+
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
@@ -47,7 +53,7 @@ public class EmailController : ControllerBase
         if (string.IsNullOrEmpty(user.EmailVerificationTokenHash) || string.IsNullOrEmpty(token))
             return _errorService.AuthError("invalid_token");
         
-        var hashed = TokenService.HashToken(token);
+        var hashed = _tokenService.HashToken(token);
 
         if (!CryptographicOperations.FixedTimeEquals(
                 Convert.FromBase64String(user.EmailVerificationTokenHash),
@@ -75,7 +81,7 @@ public class EmailController : ControllerBase
         }
 
         var rawToken = TokenService.GenerateSecureToken();
-        user.EmailVerificationTokenHash = TokenService.HashToken(rawToken);
+        user.EmailVerificationTokenHash = _tokenService.HashToken(rawToken);
         user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24);
         await _context.SaveChangesAsync();
 
@@ -99,7 +105,7 @@ public class EmailController : ControllerBase
         }
 
         var rawToken = TokenService.GenerateSecureToken();
-        user.PasswordResetTokenHash = TokenService.HashToken(rawToken);
+        user.PasswordResetTokenHash = _tokenService.HashToken(rawToken);
         user.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(1);
         await _context.SaveChangesAsync();
 
@@ -115,7 +121,10 @@ public class EmailController : ControllerBase
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
     {
-        var user = await _context.Users.SingleOrDefaultAsync(u => u.Id.ToString() == request.UserId);
+        if (!Guid.TryParse(request.UserId, out var guid))
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == guid);
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
@@ -128,7 +137,7 @@ public class EmailController : ControllerBase
         if (string.IsNullOrEmpty(request.NewPassword))
             return _errorService.BadReq("password_required");
 
-        var hashed = TokenService.HashToken(request.Token);
+        var hashed = _tokenService.HashToken(request.Token);
 
         if (!CryptographicOperations.FixedTimeEquals(
                 Convert.FromBase64String(user.PasswordResetTokenHash),

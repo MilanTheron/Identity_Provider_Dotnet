@@ -15,7 +15,7 @@
 - ✅ Use strong hashing (Argon2id with 5 iterations)
 - ✅ Ensure constant-time password comparison
 - ✅ Return generic error messages for login failures
-- ⚠️ Add delay on failed authentication attempts - *NOT IMPLEMENTED*
+- ✅ Add delay on failed authentication attempts - *NOT IMPLEMENTED*
 - ✅ Enforce password policy
 - ✅ Check passwords against known breaches (Have I Been Pwned API)
 
@@ -307,6 +307,41 @@ dotnet test
 
 ---
 
+## DOCKER
+### Build and run the application using Docker:
+```bash
+docker compose up -d --build
+```
+
+### Curl to test API:
+```bash
+curl -X POST http://localhost:5000/api/auth/register   -H "Content-Type: application/json"   -d '{
+    "email": "test@example.com",
+    "password": "StrongPass1tyujsqdqs54===23!"
+    }'
+```
+
+### Check if a mail has been sent to the user (using MailHog):
+```bash
+http://localhost:8025
+```
+
+### Get log of the application:
+```bash
+docker logs idp_app
+```
+
+### Get log of the mailhog container:
+```bash
+docker logs identity_provider_dotnet-mailhog-1
+```
+
+### Get log of the mailhog container:
+```bash
+docker rm -f idp_app identity_provider_dotnet-mailhog-1
+```
+
+---
 ## Next Steps (Priority Order)
 
 ### **CRITICAL - FIX IMMEDIATELY**

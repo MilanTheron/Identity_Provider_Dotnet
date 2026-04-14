@@ -1,0 +1,24 @@
+﻿services:
+  idp:
+    build:
+      context: .
+      dockerfile: idp/Dockerfile
+    container_name: idp_app
+    ports:
+      - "5000:8080"
+    depends_on:
+      - mailhog
+    volumes:
+      - ./idp/keys:/app/keys
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - Smtp__Host=mailhog
+      - Smtp__Port=1025
+      - Smtp__From=noreply@local.test
+
+  mailhog:
+    image: mailhog/mailhog
+    ports:
+      - "8025:8025"
+      - "1025:1025"

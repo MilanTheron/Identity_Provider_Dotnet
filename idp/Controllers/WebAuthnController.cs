@@ -36,7 +36,10 @@ public class WebAuthnController : ControllerBase
         if (string.IsNullOrEmpty(userId))
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
-        var user = await _context.Users.SingleOrDefaultAsync(u => u.Id.ToString() == userId);
+        if (!Guid.TryParse(userId, out var guid))
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == guid);
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
@@ -54,7 +57,10 @@ public class WebAuthnController : ControllerBase
         if (string.IsNullOrEmpty(userId))
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
-        var user = await _context.Users.SingleOrDefaultAsync(u => u.Id.ToString() == userId);
+        if (!Guid.TryParse(userId, out var guid))
+            return _errorService.AuthError(ErrorCodes.Unauthorized);
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == guid);
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 

@@ -7,10 +7,16 @@ public class PipelineConfig : IConfigureApp
         // Exception handling / HSTS / HTTPS
         app.UseExceptionHandler("/Error");
         app.UseHsts();
-        app.UseHttpsRedirection();
+        if (!app.Environment.IsDevelopment())
+        {
+            app.UseHttpsRedirection();
+        }
 
         // Rate Limiter
         app.UseRateLimiter();
+        
+        // Routing
+        app.UseRouting();
         
         // Authentication & authorization
         app.UseAuthentication();

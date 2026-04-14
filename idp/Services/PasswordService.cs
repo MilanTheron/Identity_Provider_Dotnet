@@ -35,7 +35,7 @@ public class PasswordService
 
         return $"{Convert.ToBase64String(salt)}:{hash}";
     }
-    
+
     public bool VerifyPassword(string password, string storedHash)
     {
         _logger.LogDebug("Verifying password");

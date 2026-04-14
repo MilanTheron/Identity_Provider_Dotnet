@@ -39,7 +39,7 @@ public class TokenController : ControllerBase
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
         
-        var requestHash = TokenService.HashToken(request.RefreshToken);
+        var requestHash = _tokenService.HashToken(request.RefreshToken);
         var storedToken = await _context.RefreshTokens
             .SingleOrDefaultAsync(rt => rt.Token == requestHash);
 
@@ -78,7 +78,7 @@ public class TokenController : ControllerBase
         // Generate new tokens
         var (newAccessToken, newJti) = await _tokenService.GenerateJwtToken(user, storedToken.MfaVerified, storedToken.Scope, storedToken.ClientId);
         var newRefreshTokenValue = TokenService.GenerateSecureToken();
-        var newRefreshTokenHash = TokenService.HashToken(newRefreshTokenValue);
+        var newRefreshTokenHash = _tokenService.HashToken(newRefreshTokenValue);
         storedToken.ReplacedByToken = newRefreshTokenHash;
 
         var newRefreshToken = new RefreshToken

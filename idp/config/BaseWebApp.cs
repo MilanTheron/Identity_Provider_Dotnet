@@ -1,4 +1,7 @@
-﻿namespace idp.config;
+﻿using idp.Data;
+using Microsoft.EntityFrameworkCore;
+
+namespace idp.config;
 
 public abstract class BaseWebApp
 {
@@ -18,6 +21,13 @@ public abstract class BaseWebApp
 
         var app = builder.Build();
 
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            db.Database.Migrate();
+        }
+        
         foreach (var c in _configs.OfType<IConfigureApp>())
             c.ConfigureApp(app);
 

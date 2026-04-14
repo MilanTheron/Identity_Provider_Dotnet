@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using idp.Data;
 
@@ -10,9 +11,11 @@ using idp.Data;
 namespace idp.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260413075710_AddOAuthClients")]
+    partial class AddOAuthClients
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.0");
@@ -192,7 +195,7 @@ namespace idp.Migrations
                     b.PrimitiveCollection<string>("BackupCodes")
                         .HasColumnType("TEXT");
 
-                    b.Property<Guid?>("DeviceId")
+                    b.Property<Guid>("DeviceId")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Email")
@@ -241,8 +244,6 @@ namespace idp.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("DeviceId");
-
                     b.ToTable("Users");
                 });
 
@@ -271,15 +272,6 @@ namespace idp.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("WebAuthnCredentials");
-                });
-
-            modelBuilder.Entity("idp.Models.User", b =>
-                {
-                    b.HasOne("idp.Models.Device", "Device")
-                        .WithMany()
-                        .HasForeignKey("DeviceId");
-
-                    b.Navigation("Device");
                 });
 
             modelBuilder.Entity("idp.Models.WebAuthnCredential", b =>
