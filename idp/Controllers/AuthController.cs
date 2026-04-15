@@ -121,7 +121,7 @@ public class AuthController : ControllerBase
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         var email = request.Email?.Trim().ToLowerInvariant() ?? "invalid";
-        var ua = Request.Headers["User-Agent"].ToString();
+        var ua = HttpContext.Request.Headers.UserAgent.ToString();
         var key = $"{clientIp}:{email}:{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(ua)))}";
 
         var user = await _context.Users
@@ -136,9 +136,7 @@ public class AuthController : ControllerBase
             return _errorService.AuthError(ErrorCodes.InvalidCredentials);
         }
 
-        var passwordValid = _passwordService.VerifyPassword(password, user.PasswordHash);
-
-        if (!passwordValid)
+        if (!_passwordService.VerifyPassword(password, user.PasswordHash))
         {
             _delayService.RegisterFailure(key);
             await _delayService.ApplyDelayAsync(key);
@@ -226,9 +224,13 @@ public class AuthController : ControllerBase
     private bool ValidateMfa(LoginRequest request, User user)
     {
         // prevent two being used at once
-        if (!string.IsNullOrWhiteSpace(request.TotpCode) &&
-            !string.IsNullOrWhiteSpace(request.BackupCode) &&
-            !string.IsNullOrEmpty(request.TotpFallbackToken))
+        int methodsUsed = 0;
+
+        if (!string.IsNullOrWhiteSpace(request.TotpCode)) methodsUsed++;
+        if (!string.IsNullOrWhiteSpace(request.BackupCode)) methodsUsed++;
+        if (!string.IsNullOrWhiteSpace(request.TotpFallbackToken)) methodsUsed++;
+
+        if (methodsUsed > 1)
             return false;
 
         // ---- TOTP ----
@@ -294,8 +296,7 @@ public class AuthController : ControllerBase
             CryptographicOperations.FixedTimeEquals(
                 Convert.FromBase64String(stored),
                 Convert.FromBase64String(hashedInput)
-            )
-        );
+            ));
 
         if (match == null)
             return false;

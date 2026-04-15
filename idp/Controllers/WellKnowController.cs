@@ -47,14 +47,21 @@ public class WellKnownController : ControllerBase
             forgot_password_endpoint = $"{issuer}/api/email/forgot-password",
             reset_password_endpoint = $"{issuer}/api/email/reset-password",
             
-            // Me
-            userinfo_endpoint = $"{issuer}/api/me/me",
+            // Userinfo
+            userinfo_endpoint = $"{issuer}/userinfo",
             
             // Totp
             setup_totp_endpoint = $"{issuer}/api/totp/setup-totp",
             verify_totp_endpoint = $"{issuer}/api/totp/verify-totp",
             request_totp_fallback_endpoint = $"{issuer}/api/totp/request-totp-fallback",
             verify_totp_fallback_endpoint = $"{issuer}/api/totp/verify-totp-fallback",
+            
+            // OpenID Connect metadata
+            response_types_supported = new[] { "code" },
+            subject_types_supported = new[] { "public" },
+            id_token_signing_alg_values_supported = new[] { "RS256" },
+            scopes_supported = new[] { "openid", "profile", "email" },
+            token_endpoint_auth_methods_supported = new[] { "client_secret_post" },
             
             jwks_uri = $"{issuer}/.well-known/jwks"
         };

@@ -15,6 +15,9 @@ public class PipelineConfig : IConfigureApp
         // Rate Limiter
         app.UseRateLimiter();
         
+        // Favicon
+        app.UseStaticFiles();
+        
         // Routing
         app.UseRouting();
         
@@ -24,5 +27,8 @@ public class PipelineConfig : IConfigureApp
 
         // Map controllers
         app.MapControllers();
+        
+        // Map Razor Pages
+        app.MapRazorPages();
     }
 }

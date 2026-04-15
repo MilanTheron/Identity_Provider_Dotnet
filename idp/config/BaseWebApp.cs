@@ -1,5 +1,6 @@
 ﻿using idp.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.DataProtection;
 
 namespace idp.config;
 
@@ -19,8 +20,13 @@ public abstract class BaseWebApp
         foreach (var c in _configs.OfType<IConfigureServices>())
             c.ConfigureServices(builder.Configuration, builder.Services);
 
+        builder.Services.AddRazorPages();
+        builder.Services.AddDataProtection()
+            .PersistKeysToFileSystem(new DirectoryInfo("/app/keys"))
+            .SetApplicationName("idp");
+        
         var app = builder.Build();
-
+        
         using (var scope = app.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();

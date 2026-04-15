@@ -1,0 +1,53 @@
+﻿@page
+@using idp.Pages;
+@model AuthModel
+@{
+    ViewData["Title"] = "Auth";
+}
+
+<div class="container">
+    <h2>@(Model.IsLogin ? "Login" : "Register")</h2>
+
+    <form method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="IsLogin"/>
+
+        <input asp-for="Email" placeholder="Email"/>
+        <input asp-for="Password" type="password" placeholder="Password"/>
+
+        @if (Model.IsLogin)
+        {
+            <input asp-for="TotpCode" placeholder="TOTP (optional)"/>
+            <input asp-for="BackupCode" placeholder="Backup code (optional)"/>
+        }
+
+        <button type="submit">Submit</button>
+    </form>
+
+    <form method="get">
+        <input type="hidden" name="IsLogin" value="@(Model.IsLogin ? "false" : "true")" />
+        <button type="submit">
+            Switch to @(Model.IsLogin ? "Register" : "Login")
+        </button>
+    </form>
+
+    @if (!string.IsNullOrEmpty(Model.Message))
+    {
+        <div class="msg">@Model.Message</div>
+    }
+</div>
+
+<style>
+.container {
+    width: 320px;
+    margin: 100px auto;
+}
+input, button {
+    width: 100%;
+    margin: 5px 0;
+    padding: 10px;
+}
+.msg {
+    margin-top: 10px;
+}
+</style>

@@ -6,15 +6,17 @@ using Microsoft.AspNetCore.RateLimiting;
 namespace idp.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("userinfo")]
 public class MeController : ControllerBase
 {
     [Authorize]
-    [EnableRateLimiting("auth")]
-    [HttpGet("me")]
-    public IActionResult Me()
+    public IActionResult UserInfo()
     {
-        var username = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
-        return Ok(new { username });
+        return Ok(new
+        {
+            sub = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value,
+            email = User.FindFirst("email")?.Value,
+            email_verified = User.FindFirst("email_verified")?.Value == "true"
+        });
     }
 }
