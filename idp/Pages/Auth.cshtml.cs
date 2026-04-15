@@ -22,7 +22,6 @@ public class AuthModel : PageModel
     private readonly SendEmailService _emailService;
     private readonly TokenService _tokenService;
     private readonly BackupCodeService _backupCodeService;
-    private readonly ILogger<AuthModel> _logger;
 
     public AuthModel(
         AppDbContext context,
@@ -31,8 +30,7 @@ public class AuthModel : PageModel
         ErrorService errorService,
         SendEmailService emailService,
         TokenService tokenService,
-        BackupCodeService backupCodeService,
-        ILogger<AuthModel> logger)
+        BackupCodeService backupCodeService)
     {
         _context = context;
         _passwordService = passwordService;
@@ -41,7 +39,6 @@ public class AuthModel : PageModel
         _emailService = emailService;
         _tokenService = tokenService;
         _backupCodeService = backupCodeService;
-        _logger = logger;
     }
 
     [BindProperty]
@@ -67,9 +64,6 @@ public class AuthModel : PageModel
     public async Task<IActionResult> OnPostAsync()
     {
         Email = Email.Trim().ToLowerInvariant();
-        
-        Console.WriteLine($"Auth attempt: Email={Email}");
-        Console.WriteLine($"IsLogin: {IsLogin}");
 
         if (string.IsNullOrEmpty(Email) || string.IsNullOrEmpty(Password))
         {
