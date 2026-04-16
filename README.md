@@ -321,6 +321,11 @@ curl -X POST http://localhost:5000/api/auth/register   -H "Content-Type: applica
     }'
 ```
 
+### Login page
+```bash
+http://localhost:5000/Auth
+```
+
 ### Check if a mail has been sent to the user (using MailHog):
 ```bash
 http://localhost:8025

@@ -88,7 +88,7 @@ public class EmailController : ControllerBase
         var verifyUrl = $"{Request.Scheme}://{Request.Host}/api/email/verify-email?token={rawToken}&userId={user.Id}";
         await _emailService.SendEmail(user.Email, "Verify your email", $"Click to verify: <a href='{verifyUrl}'>link</a>");
         _logger.LogInformation("Verification email sent to {Email}", user.Email);
-
+    
         return Ok();
     }
 

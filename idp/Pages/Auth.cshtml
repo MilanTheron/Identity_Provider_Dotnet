@@ -6,28 +6,56 @@
 }
 
 <div class="container">
-    <h2>@(Model.IsLogin ? "Login" : "Register")</h2>
-
+    <h2>@(Model.Mode == "login" ? "Login" : "Register")</h2>
+    
+    <!-- Main form -->
     <form method="post">
         @Html.AntiForgeryToken()
-        <input type="hidden" asp-for="IsLogin"/>
 
-        <input asp-for="Email" placeholder="Email"/>
-        <input asp-for="Password" type="password" placeholder="Password"/>
+        <input type="hidden" name="Mode" value="@Model.Mode" />
 
-        @if (Model.IsLogin)
+        <input asp-for="Email" placeholder="Email" />
+        <input asp-for="Password" type="password" placeholder="Password" />
+
+        @if (Model.Mode == "login")
         {
-            <input asp-for="TotpCode" placeholder="TOTP (optional)"/>
-            <input asp-for="BackupCode" placeholder="Backup code (optional)"/>
-        }
+            <input asp-for="TotpCode" placeholder="TOTP (optional)" />
+            <input asp-for="BackupCode" placeholder="Backup code (optional)" />
 
-        <button type="submit">Submit</button>
+            <button type="submit" name="Action" value="login">
+                Login
+            </button>
+        }
+        else
+        {
+            <input asp-for="ConfirmPassword" type="password" placeholder="Confirm password" />
+
+            <button type="submit" name="Action" value="register">
+                Register
+            </button>
+        }
     </form>
 
+    <!-- Resend verification -->
+    @if (Model.Mode == "register")
+    {
+        <form method="post">
+            @Html.AntiForgeryToken()
+
+            <input type="hidden" asp-for="Email" />
+            <input type="hidden" name="Mode" value="register" />
+
+            <button type="submit" name="Action" value="resend">
+                Resend verification email
+            </button>
+        </form>
+    }
+
+    <!-- Switch mode -->
     <form method="get">
-        <input type="hidden" name="IsLogin" value="@(Model.IsLogin ? "false" : "true")" />
+        <input type="hidden" name="Mode" value="@(Model.Mode == "login" ? "register" : "login")" />
         <button type="submit">
-            Switch to @(Model.IsLogin ? "Register" : "Login")
+            Switch to @(Model.Mode == "login" ? "Register" : "Login")
         </button>
     </form>
 
