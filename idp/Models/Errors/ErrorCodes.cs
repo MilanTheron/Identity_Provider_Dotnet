@@ -10,5 +10,6 @@ public static class ErrorCodes
     public const string InvalidCode = "INVALID-CODE";
     public const string WeakPassword = "WEAK-PASSWORD";
     public const string EmailNotVerified = "EMAIL-NOT-VERIFIED";
+    public const string PasswordsAreTheSame = "OLD-AND-NEW-PASSWORDS-ARE-THE-SAME";
     public const string PasswordsDoNotMatch = "PASSWORDS-DO-NOT-MATCH";
 }

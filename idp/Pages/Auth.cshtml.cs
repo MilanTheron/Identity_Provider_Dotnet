@@ -4,9 +4,8 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.EntityFrameworkCore;
 using idp.Data;
 using idp.Models;
-using idp.Models.Errors;
 using idp.Services;
-using OtpNet;
+using idp.Models.Errors;
 using System.Text;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -20,8 +19,7 @@ public class AuthModel : PageModel
     private readonly LoginDelayService _delayService;
     private readonly ErrorService _errorService;
     private readonly SendEmailService _emailService;
-    private readonly TokenService _tokenService;
-    private readonly BackupCodeService _backupCodeService;
+    private readonly AuthService _authService;
 
     public AuthModel(
         AppDbContext context,
@@ -29,16 +27,14 @@ public class AuthModel : PageModel
         LoginDelayService delayService,
         ErrorService errorService,
         SendEmailService emailService,
-        TokenService tokenService,
-        BackupCodeService backupCodeService)
+        AuthService authService)
     {
         _context = context;
         _passwordService = passwordService;
         _delayService = delayService;
         _errorService = errorService;
         _emailService = emailService;
-        _tokenService = tokenService;
-        _backupCodeService = backupCodeService;
+        _authService = authService;
     }
 
     [BindProperty]
@@ -67,6 +63,8 @@ public class AuthModel : PageModel
 
     public string Message { get; set; }
 
+    private string _key;
+
     public async Task<IActionResult> OnPostAsync()
     {
         if (string.IsNullOrEmpty(Email))
@@ -74,8 +72,15 @@ public class AuthModel : PageModel
             Message = _errorService.Translate(ErrorCodes.InvalidRequest);
             return Page();
         }
-
+        
         Email = Email.Trim().ToLowerInvariant();
+        
+        var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+        if (clientIp == null)
+            return Page();
+        
+        var ua = HttpContext.Request.Headers.UserAgent.ToString();
+        _key = $"{clientIp}:{Email}:{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(ua)))}";
         
         return Action switch
         {
@@ -83,38 +88,54 @@ public class AuthModel : PageModel
             "register" => await HandleRegister(),
             "login" => await HandleLogin(),
             "forgot" => await HandleForgotPassword(),
-            "reset" => await HandleResetPassword(),
             _ => Page()
         };
     }
 
     private async Task<IActionResult> HandleForgotPassword()
     {
-        return Page();
-    }
-    
-    private async Task<IActionResult> HandleResetPassword()
-    {
+        var user = await _context.Users
+            .SingleOrDefaultAsync(u => u.Email == Email);
+
+        await Task.Delay(100);
+
+        if (user == null)
+            return await Fail(_key, ErrorCodes.Unauthorized);
+
+        var rawToken = TokenService.GenerateSecureToken();
+
+        _authService.SetPasswordReset(user, rawToken);
+
+        await _context.SaveChangesAsync();
+
+        var resetUrl =
+            $"{Request.Scheme}://{Request.Host}/ResetPassword" +
+            $"?token={Uri.EscapeDataString(rawToken)}&userId={user.Id}";
+
+        await _emailService.SendEmail(user.Email, "Reset your password", resetUrl);
+
+        Message = "If the email exists, a reset link has been sent.";
         return Page();
     }
 
     private async Task<IActionResult> HandleResendVerification()
     {
-        var user = await _context.Users.SingleOrDefaultAsync(u => u.Email == Email);
+        var user = await _context.Users
+            .SingleOrDefaultAsync(u => u.Email == Email);
+
+        await Task.Delay(100);
+
         if (user == null || user.EmailVerified)
-        { 
-            await Task.Delay(100);
-            return Page();
-        }
+            return await Fail(_key, ErrorCodes.Unauthorized);
 
         var rawToken = TokenService.GenerateSecureToken();
-        user.EmailVerificationTokenHash = _tokenService.HashToken(rawToken);
-        user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24);
+        _authService.SetEmailVerification(user, rawToken);
+        
         await _context.SaveChangesAsync();
 
         var verifyUrl =
             $"{Request.Scheme}://{Request.Host}/api/email/verify-email" +
-            $"?token={Uri.EscapeDataString(rawToken)}&userId={user.Id}"; // change to use a built-in method instead of api
+            $"?token={Uri.EscapeDataString(rawToken)}&userId={user.Id}";
         await _emailService.SendEmail(user.Email, "Verify your email", verifyUrl);
 
         Message = "A new verification mail as been sent.";
@@ -124,28 +145,16 @@ public class AuthModel : PageModel
     private async Task<IActionResult> HandleRegister()
     {
         if (string.IsNullOrEmpty(Email) || string.IsNullOrEmpty(Password))
-        {
-            Message = _errorService.Translate(ErrorCodes.InvalidRequest);
-            return Page();
-        }
+            return await Fail(_key, ErrorCodes.InvalidRequest);
         
         if (await _context.Users.AnyAsync(u => u.Email == Email))
-        {
-            Message = _errorService.Translate(ErrorCodes.InvalidRequest);
-            return Page();
-        }
+            return await Fail(_key, ErrorCodes.InvalidRequest);
         
         if (await PasswordService.IsWeak(Password))
-        {
-            Message = _errorService.Translate(ErrorCodes.WeakPassword);
-            return Page();
-        }
+            return await Fail(_key, ErrorCodes.WeakPassword);
         
         if (Password != ConfirmPassword)
-        {
-            Message = _errorService.Translate(ErrorCodes.PasswordsDoNotMatch);
-            return Page();
-        }
+            return await Fail(_key, ErrorCodes.PasswordsDoNotMatch);
         
         var device = new Device
         {
@@ -164,8 +173,7 @@ public class AuthModel : PageModel
         };
         
         var rawToken = TokenService.GenerateSecureToken();
-        user.EmailVerificationTokenHash = _tokenService.HashToken(rawToken);
-        user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24);
+        _authService.SetEmailVerification(user, rawToken);
         
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
@@ -174,7 +182,7 @@ public class AuthModel : PageModel
         {
             var verifyUrl =
                 $"{Request.Scheme}://{Request.Host}/api/email/verify-email" +
-                $"?token={Uri.EscapeDataString(rawToken)}&userId={user.Id}"; // change to use a built-in method instead of api
+                $"?token={Uri.EscapeDataString(rawToken)}&userId={user.Id}";
 
             await _emailService.SendEmail(user.Email, "Verify your email", verifyUrl);
         }
@@ -189,43 +197,20 @@ public class AuthModel : PageModel
 
     private async Task<IActionResult> HandleLogin()
     {
-        var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
-        if (clientIp == null)
-            return Page();
-        
-        var email = Email.Trim().ToLowerInvariant();
-        var ua = HttpContext.Request.Headers.UserAgent.ToString();
-        var key = $"{clientIp}:{email}:{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(ua)))}";
-        
         var user = await _context.Users
-            .SingleOrDefaultAsync(u => u.Email == email);
+            .SingleOrDefaultAsync(u => u.Email == Email);
         
         if (user == null)
-        {
-            _delayService.RegisterFailure(key);
-            await _delayService.ApplyDelayAsync(key);
-            Message = _errorService.Translate(ErrorCodes.InvalidCredentials);
-            return Page();
-        }
-        
+            return await Fail(_key, ErrorCodes.InvalidCredentials);
+
         if (!user.EmailVerified)
-        {
-            _delayService.RegisterFailure(key);
-            await _delayService.ApplyDelayAsync(key);
-            Message = _errorService.Translate(ErrorCodes.EmailNotVerified);
-            return Page();
-        }
+            return await Fail(_key, ErrorCodes.EmailNotVerified);
         
         if (!_passwordService.VerifyPassword(Password, user.PasswordHash))
-        {
-            _delayService.RegisterFailure(key);
-            await _delayService.ApplyDelayAsync(key);
-            Message = _errorService.Translate(ErrorCodes.InvalidCredentials);
-            return Page();
-        }
+            return await Fail(_key, ErrorCodes.InvalidCredentials);
         
         // Reset delay on correct password
-        _delayService.Reset(key);
+        _delayService.Reset(_key);
         
         // ---- MFA ----
         var mfaVerified = false;
@@ -235,20 +220,10 @@ public class AuthModel : PageModel
             if (string.IsNullOrWhiteSpace(TotpCode) &&
                 string.IsNullOrEmpty(BackupCode) &&
                 string.IsNullOrEmpty(TotpFallbackToken))
-            {
-                _delayService.RegisterFailure(key);
-                await _delayService.ApplyDelayAsync(key);
-                Message = _errorService.Translate(ErrorCodes.MfaRequired);
-                return Page();
-            }
+                return await Fail(_key, ErrorCodes.MfaRequired);
             
-            if (!ValidateMfa(user))
-            {
-                _delayService.RegisterFailure(key);
-                await _delayService.ApplyDelayAsync(key);
-                Message = _errorService.Translate(ErrorCodes.MfaRequired);
-                return Page();
-            }
+            if (!_authService.ValidateMfa(user, TotpCode, BackupCode, TotpFallbackToken))
+                return await Fail(_key, ErrorCodes.MfaRequired);
             
             mfaVerified = true;
         }
@@ -268,94 +243,11 @@ public class AuthModel : PageModel
         Message = "Login Successful";
         return Page();
     }
-
-    private bool ValidateMfa(User user)
+    
+    private async Task<IActionResult> Fail(string key, string error)
     {
-        // prevent two being used at once
-        int methodsUsed = 0;
-        
-        if (!string.IsNullOrWhiteSpace(TotpCode)) methodsUsed++;
-        if (!string.IsNullOrWhiteSpace(BackupCode)) methodsUsed++;
-        if (!string.IsNullOrWhiteSpace(TotpFallbackToken)) methodsUsed++;
-        
-        if (methodsUsed > 1)
-            return false;
-        
-        // ---- TOTP ----
-        if (!string.IsNullOrWhiteSpace(TotpCode))
-        {
-            if (string.IsNullOrEmpty(user.TotpSecret))
-                return false;
-            
-            try
-            {
-                var secretBytes = Base32Encoding.ToBytes(user.TotpSecret);
-                var totp = new Totp(secretBytes);
-                
-                var window = new VerificationWindow(previous: 1, future: 1);
-                
-                var code = TotpCode.Trim();
-                
-                if (!totp.VerifyTotp(code, out var timeStepMatched, window))
-                    return false;
-                    
-                if (user.LastTotpStepUsed.HasValue &&
-                    user.LastTotpStepUsed.Value == timeStepMatched)
-                    return false;
-                    
-                user.LastTotpStepUsed = timeStepMatched;
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-        
-        // ---- TOTP Fallback ----
-        if (!string.IsNullOrEmpty(TotpFallbackToken) && !string.IsNullOrEmpty(user.TotpFallbackTokenHash))
-        {
-            if (user.TotpFallbackTokenExpiry == null || user.TotpFallbackTokenExpiry < DateTime.UtcNow)
-                return false;
-            
-            var hashed = _tokenService.HashToken(TotpFallbackToken);
-            
-            if (!CryptographicOperations.FixedTimeEquals(
-                    Convert.FromBase64String(user.TotpFallbackTokenHash),
-                    Convert.FromBase64String(hashed)))
-                return false;
-
-            user.TotpFallbackTokenHash = null;
-            user.TotpFallbackTokenExpiry = null;
-            return true;
-        }
-        
-        // ---- Backup code ----
-        if (string.IsNullOrWhiteSpace(BackupCode) || user.BackupCodes == null)
-            return false;
-        
-        if (user.BackupCodes.Count == 0)
-            return false;
-        
-        var input = BackupCode.Trim();
-        var hashedInput = _backupCodeService.HashBackupCode(input);
-        
-        var match = user.BackupCodes.FirstOrDefault(stored =>
-            CryptographicOperations.FixedTimeEquals(
-                Convert.FromBase64String(stored),
-                Convert.FromBase64String(hashedInput)
-            ));
-        
-        if (match == null)
-            return false;
-        
-        user.BackupCodes.Remove(match);
-        return true;
-    }
-
-    private async Task FailDelay(string key)
-    {
-        _delayService.RegisterFailure(key);
-        await _delayService.ApplyDelayAsync(key);
+        var err = await _authService.FailureAsync(key, error);
+        Message = _errorService.Translate(err);
+        return Page();
     }
 }

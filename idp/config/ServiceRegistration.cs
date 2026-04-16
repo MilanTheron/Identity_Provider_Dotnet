@@ -24,6 +24,7 @@ public class ServiceRegistration : IConfigureServices
         services.AddScoped<PasswordService>();
         services.AddScoped<SecurityService>();
         services.AddScoped<SendEmailService>();
+        services.AddScoped<AuthService>();
         services.AddScoped<TokenService>();
         
         services.AddHttpContextAccessor();

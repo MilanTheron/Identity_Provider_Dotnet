@@ -24,7 +24,7 @@ public class ErrorService
             ErrorCodes.WeakPassword => "Password too weak",
             ErrorCodes.EmailNotVerified => "Email not verified",
             
-            _ => "Unknown error"
+            _ => code
         };
     }
 
