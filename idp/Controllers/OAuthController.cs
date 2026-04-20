@@ -37,7 +37,7 @@ public class OAuthController : ControllerBase
     {
         if (User.Identity == null || !User.Identity.IsAuthenticated)
             return Redirect($"/login?returnUrl={Uri.EscapeDataString(Request.Path + Request.QueryString)}");
-        
+
         if (request.ResponseType != "code")
             return BadRequest(new { error = "invalid_response_type" });
         
@@ -65,24 +65,23 @@ public class OAuthController : ControllerBase
         if (string.IsNullOrEmpty(request.CodeChallenge) || request.CodeChallengeMethod != "S256")
             return BadRequest(new { error = "invalid_pkce" });
         
-        var allowedScopes = client.AllowedScopes;
-        
-        var requestedScopes = (request.Scope ?? "")
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        
-        if (requestedScopes.Any(s => !allowedScopes.Contains(s)))
-            return _errorService.BadReq("invalid_scope");
-        
-        if (string.IsNullOrEmpty(request.Scope))
-            return BadRequest(new { error = "invalid_scope" });
-        
         if (string.IsNullOrEmpty(request.ClientId))
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
         
         if (string.IsNullOrEmpty(request.RedirectUri))
             return BadRequest(new { error = "invalid_RedirectUri" });
         
+        Console.WriteLine("=== AUTHORIZE ===");
+        Console.WriteLine($"client_id: {request.ClientId}");
+        Console.WriteLine($"redirect_uri: {request.RedirectUri}");
+        Console.WriteLine($"state: {request.State}");
+        Console.WriteLine($"code_challenge: {request.CodeChallenge}");
+        
         var code = TokenService.GenerateSecureToken();
+        
+        var scope = string.IsNullOrWhiteSpace(request.Scope)
+            ? "openid"
+            : request.Scope;
         
         var authCode = new AuthorizationCode
         {
@@ -91,11 +90,15 @@ public class OAuthController : ControllerBase
             RedirectUri = request.RedirectUri,
             CodeChallenge = request.CodeChallenge,
             CodeChallengeMethod = request.CodeChallengeMethod,
-            Scope = request.Scope,
+            Scope = scope,
             ExpiresAt = DateTime.UtcNow.AddMinutes(5),
             Used = false,
             UserId = userId
         };
+        
+        Console.WriteLine($"AuthCode stored:");
+        Console.WriteLine($"challenge: {authCode.CodeChallenge}");
+        Console.WriteLine($"method: {authCode.CodeChallengeMethod}");
         
         _context.AuthorizationCodes.Add(authCode);
         await _context.SaveChangesAsync();
@@ -108,7 +111,8 @@ public class OAuthController : ControllerBase
     [AllowAnonymous]
     [EnableRateLimiting("auth")]
     [HttpPost("token")]
-    public async Task<IActionResult> Token([FromBody] TokenRequest request)
+    [Consumes("application/x-www-form-urlencoded")]
+    public async Task<IActionResult> Token([FromForm] TokenRequest request)
     {
         if (request.GrantType != "authorization_code")
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
@@ -119,7 +123,7 @@ public class OAuthController : ControllerBase
         if (client == null)
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
         
-        if (string.IsNullOrEmpty(request.Code) || string.IsNullOrEmpty(request.Scope))
+        if (string.IsNullOrEmpty(request.Code))
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
         
         var authCode = await _context.AuthorizationCodes
@@ -131,25 +135,35 @@ public class OAuthController : ControllerBase
             authCode.ClientId != request.ClientId)
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
         
-        var requestedScopes = request.Scope.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        
-        if (!requestedScopes.Contains("openid"))
+        var scope = request.Scope ?? authCode.Scope;
+
+        if (string.IsNullOrEmpty(scope))
+            return _errorService.BadReq("invalid_scope");
+
+        var requestedScopes = scope.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        if (!requestedScopes.Contains("openid") &&
+            requestedScopes.Any(s => !client.AllowedScopes.Contains(s)))
             return _errorService.BadReq("invalid_scope");
         
-        if (requestedScopes.Any(s => !client.AllowedScopes.Contains(s)))
-            return _errorService.BadReq("invalid_scope");
-        
-        if (!string.IsNullOrEmpty(request.Scope) && 
-            !client.AllowedScopes.Contains(request.Scope))
-            return _errorService.BadReq("invalid_scope");
+        Console.WriteLine("=== AUTHORIZE ===");
+        Console.WriteLine($"client_id: {client.ClientId}");
+        Console.WriteLine($"redirect_uri: {request.RedirectUri}");
+        Console.WriteLine($"code: {request.Code}");
+        Console.WriteLine($"code_challenge: {authCode.CodeChallenge}");
+        Console.WriteLine($"code_challenge_method: {authCode.CodeChallengeMethod}");
+        Console.WriteLine($"code_verifier: {request.CodeVerifier}");
         
         // PKCE
         if (authCode.CodeChallengeMethod != "S256")
+        {
+            Console.WriteLine($"Unsupported code challenge method: {authCode.CodeChallengeMethod}");
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
+        }
         
         if (string.IsNullOrEmpty(request.CodeVerifier))
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
-        
+
         var hashed = WebEncoders.Base64UrlEncode(
             SHA256.HashData(Encoding.UTF8.GetBytes(request.CodeVerifier))
         );
@@ -169,16 +183,21 @@ public class OAuthController : ControllerBase
         if (!user.EmailVerified)
             return _errorService.AuthError(ErrorCodes.InvalidCredentials);
         
+        if (string.IsNullOrWhiteSpace(user.Email))
+            throw new InvalidOperationException("User.Email is required for token generation");
+        
         string accessToken;
         string refreshTokenValue;
 
+        await using var tx = await _context.Database.BeginTransactionAsync();
+
         try
         {
-            await using var tx = await _context.Database.BeginTransactionAsync();
-            
             authCode.Used = true;
-            
-            (accessToken, var jti) = await _tokenService.GenerateJwtToken(user, false, request.Scope, request.ClientId);
+
+            (accessToken, var jti) = await _tokenService.GenerateJwtToken(
+                user, false, scope, request.ClientId);
+
             refreshTokenValue = TokenService.GenerateSecureToken();
 
             var refreshToken = new RefreshToken
@@ -188,15 +207,15 @@ public class OAuthController : ControllerBase
                 UserId = user.Id,
                 ExpiryDate = DateTime.UtcNow.AddDays(7)
             };
-            
+
             _context.Add(refreshToken);
             await _context.SaveChangesAsync();
-            
+
             await tx.CommitAsync();
         }
         catch
         {
-            await _context.Database.RollbackTransactionAsync();
+            await tx.RollbackAsync();
             throw;
         }
         

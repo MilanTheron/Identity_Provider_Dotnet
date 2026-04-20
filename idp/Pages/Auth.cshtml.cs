@@ -15,6 +15,7 @@ namespace idp.Pages;
 public class AuthModel : PageModel
 {
     private readonly AppDbContext _context;
+    private readonly IConfiguration _configuration;
     private readonly PasswordService _passwordService;
     private readonly LoginDelayService _delayService;
     private readonly ErrorService _errorService;
@@ -27,7 +28,8 @@ public class AuthModel : PageModel
         LoginDelayService delayService,
         ErrorService errorService,
         SendEmailService emailService,
-        AuthService authService)
+        AuthService authService,
+        IConfiguration configuration)
     {
         _context = context;
         _passwordService = passwordService;
@@ -35,6 +37,7 @@ public class AuthModel : PageModel
         _errorService = errorService;
         _emailService = emailService;
         _authService = authService;
+        _configuration = configuration;
     }
 
     [BindProperty]
@@ -109,7 +112,7 @@ public class AuthModel : PageModel
         await _context.SaveChangesAsync();
 
         var resetUrl =
-            $"{Request.Scheme}://{Request.Host}/ResetPassword" +
+            _configuration["Jwt:Issuer"]+ "/ResetPassword" +
             $"?token={Uri.EscapeDataString(rawToken)}&userId={user.Id}";
 
         await _emailService.SendEmail(user.Email, "Reset your password", resetUrl);
@@ -134,7 +137,7 @@ public class AuthModel : PageModel
         await _context.SaveChangesAsync();
 
         var verifyUrl =
-            $"{Request.Scheme}://{Request.Host}/api/email/verify-email" +
+            _configuration["Jwt:Issuer"] + "/api/email/verify-email" +
             $"?token={Uri.EscapeDataString(rawToken)}&userId={user.Id}";
         await _emailService.SendEmail(user.Email, "Verify your email", verifyUrl);
 
@@ -181,7 +184,7 @@ public class AuthModel : PageModel
         try
         {
             var verifyUrl =
-                $"{Request.Scheme}://{Request.Host}/api/email/verify-email" +
+                _configuration["Jwt:Issuer"] + "/api/email/verify-email" +
                 $"?token={Uri.EscapeDataString(rawToken)}&userId={user.Id}";
 
             await _emailService.SendEmail(user.Email, "Verify your email", verifyUrl);
@@ -197,6 +200,9 @@ public class AuthModel : PageModel
 
     private async Task<IActionResult> HandleLogin()
     {
+        if (string.IsNullOrEmpty(Email) || string.IsNullOrEmpty(Password))
+            return await Fail(_key, ErrorCodes.InvalidRequest);
+        
         var user = await _context.Users
             .SingleOrDefaultAsync(u => u.Email == Email);
         

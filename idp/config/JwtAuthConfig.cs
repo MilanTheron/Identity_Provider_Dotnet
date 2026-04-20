@@ -8,13 +8,16 @@ using idp.Data;
 
 namespace idp.config;
 
-public class JwtAuthConfig : IConfigureServices, IConfigureApp
+public class JwtAuthConfig : IConfigureServices
 {
     public void ConfigureServices(IConfiguration configuration, IServiceCollection services)
     {
-        var rsa = RSA.Create();
-        rsa.ImportFromPem(File.ReadAllText(configuration["Rsa:PublicKeyPath"]));
-
+        services.AddSingleton(_ =>
+        {
+            var rsa = RSA.Create();
+            rsa.ImportFromPem(File.ReadAllText(configuration["Rsa:PrivateKeyPath"]));
+            return rsa;
+        });
         // Add authentication with PolicyScheme that supports both Cookie and JWT
         services.AddAuthentication(options =>
             {
@@ -59,54 +62,109 @@ public class JwtAuthConfig : IConfigureServices, IConfigureApp
             .AddJwtBearer(options =>
             {
                 options.RequireHttpsMetadata = true;
+                
+                options.MapInboundClaims = false;
+                
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuer = true,
                     ValidIssuer = configuration["Jwt:Issuer"],
-                    ValidateAudience = true,
-                    ValidAudience = configuration["Jwt:Audience"],
+                    
+                    ValidateAudience = false,
+                    
                     ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
-                    IssuerSigningKey = new RsaSecurityKey(rsa),
+                    
                     NameClaimType = JwtRegisteredClaimNames.Sub
                 };
                 options.Events = new JwtBearerEvents
                 {
+                    OnMessageReceived = context =>
+                    {
+                        var rsa = context.HttpContext.RequestServices.GetRequiredService<RSA>();
+                        
+                        context.Options.TokenValidationParameters.IssuerSigningKey =
+                            new RsaSecurityKey(rsa);
+                        
+                        return Task.CompletedTask;
+                    },
                     OnAuthenticationFailed = context =>
                     {
+                        Console.WriteLine("JWT authentication failed: " + context.Exception.Message);
                         return Task.CompletedTask;
+                    },
+                    OnChallenge = context =>
+                    {
+                        context.HandleResponse();
+                        
+                        context.Response.StatusCode = 401;
+                        context.Response.ContentType = "application/json";
+                        
+                        var msg = context.ErrorDescription ?? context.Error ?? "Unauthorized";
+                        
+                        return context.Response.WriteAsync($"{{\"error\": \"{msg}\"}}");
                     },
                     OnTokenValidated = async context =>
                     {
-                        var sp = context.HttpContext.RequestServices;
-                        var db = sp.GetRequiredService<AppDbContext>();
-
-                        var userId = context.Principal?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
-                        var jti = context.Principal?.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
-                        var mailVerified = context.Principal?.FindFirst("email_verified")?.Value;
-
-                        if (userId == null || jti == null || mailVerified == null)
+                        var principal = context.Principal;
+                        if (principal == null)
                         {
-                            context.Fail("Invalid token");
+                            context.Fail("No principal");
                             return;
                         }
-
+                        
+                        var clientId = principal?.FindFirst("client_id")?.Value;
+                        var aud = principal?.FindFirst(JwtRegisteredClaimNames.Aud)?.Value
+                                  ?? principal?.FindFirst("aud")?.Value;
+                        
+                        if (string.IsNullOrEmpty(clientId))
+                        {
+                            context.Fail("Missing client_id");
+                            return;
+                        }
+                        
+                        if (aud != clientId)
+                        {
+                            context.Fail($"Invalid audience. Expected {clientId}, got {aud}");
+                            return;
+                        }
+                        
+                        var userIdStr = principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+                        var jti = principal.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+                        
+                        if (string.IsNullOrEmpty(userIdStr) || string.IsNullOrEmpty(jti))
+                        {
+                            context.Fail("Missing sub or jti");
+                            return;
+                        }
+                        
+                        if (!Guid.TryParse(userIdStr, out var userId))
+                        {
+                            context.Fail("Invalid user id");
+                            return;
+                        }
+                        
+                        var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                        
                         var user = await db.Users.FindAsync(userId);
-
                         if (user == null)
                         {
                             context.Fail("User no longer exists");
                             return;
                         }
+                        
+                        // Only enforce JTI for access tokens
+                        var scope = principal.FindFirst("scope")?.Value;
 
-                        if (!mailVerified.Equals("true", StringComparison.OrdinalIgnoreCase))
+                        var requiresJtiValidation =
+                            scope?.Contains("offline_access") == true ||
+                            scope?.Contains("admin") == true;
+
+                        if (requiresJtiValidation)
                         {
-                            context.Fail("Email not verified");
-                            return;
+                            if (!await SecurityService.ValidateJtiAsync(db, jti))
+                                context.Fail("Invalid token");
                         }
-
-                        if (!await SecurityService.ValidateJtiAsync(jti))
-                            context.Fail("Invalid token");
                     }
                 };
             });
@@ -119,11 +177,5 @@ public class JwtAuthConfig : IConfigureServices, IConfigureApp
             o.AddPolicy("RequireMfa", p => p.RequireClaim("mfa", "true"));
             o.AddPolicy("SensitiveOperation", p => p.RequireAuthenticatedUser());
         });
-    }
-
-    public void ConfigureApp(WebApplication app)
-    {
-        app.UseAuthentication();
-        app.UseAuthorization();
     }
 }

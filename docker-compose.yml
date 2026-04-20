@@ -1,6 +1,4 @@
-﻿version: "3.9"
-
-services:
+﻿services:
   idp:
     build:
       context: .
@@ -8,19 +6,66 @@ services:
     container_name: idp_app
     ports:
       - "5000:8080"
+      - "5001:5000"
     depends_on:
       - mailhog
     volumes:
       - ./idp/keys:/app/keys
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - ASPNETCORE_URLS=http://+:8080
+      - Jwt__Issuer=http://localhost:5000
+      - Fido__Origin=http://localhost:5000
       - Smtp__Host=mailhog
       - Smtp__Port=1025
-      - Smtp__From=noreply@local.test
+      - Smtp__From=noreply@local.testidp
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://idp:8080/.well-known/openid-configuration"]
 
   mailhog:
     image: mailhog/mailhog
     ports:
       - "8025:8025"
       - "1025:1025"
+  
+  miniflux:
+    image: miniflux/miniflux:latest
+    container_name: miniflux_app
+    depends_on:
+      db:
+        condition: service_healthy
+      idp:
+        condition: service_started
+    ports:
+      - "8081:8080"
+    extra_hosts:
+      - "localhost:host-gateway"
+    environment:
+      - DATABASE_URL=postgres://miniflux:miniflux@db/miniflux?sslmode=disable
+      - RUN_MIGRATIONS=1
+      - CREATE_ADMIN=1
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=adminadmin
+        
+      - OAUTH2_PROVIDER=oidc
+      - OAUTH2_CLIENT_ID=miniflux
+      - OAUTH2_CLIENT_SECRET=super-secret
+      - OAUTH2_REDIRECT_URL=http://localhost:8081/oauth2/oidc/callback
+      - OAUTH2_OIDC_DISCOVERY_ENDPOINT=http://localhost:5000
+
+  db:
+    image: postgres:18
+    container_name: miniflux_db
+    environment:
+      - POSTGRES_DB=miniflux
+      - POSTGRES_USER=miniflux
+      - POSTGRES_PASSWORD=miniflux
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U miniflux"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+        
+volumes:
+  pgdata:

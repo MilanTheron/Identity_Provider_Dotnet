@@ -1,6 +1,7 @@
 ﻿using idp.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 
 namespace idp.config;
 
@@ -20,6 +21,7 @@ public abstract class BaseWebApp
         foreach (var c in _configs.OfType<IConfigureServices>())
             c.ConfigureServices(builder.Configuration, builder.Services);
 
+        builder.Services.AddControllers();
         builder.Services.AddRazorPages();
         builder.Services.AddDataProtection()
             .PersistKeysToFileSystem(new DirectoryInfo("/app/keys"))

@@ -4,7 +4,7 @@ public class SecurityHeadersConfig : IConfigureApp
 {
     public void ConfigureApp(WebApplication app)
     {
-        app.Use(async (context, next) =>
+        app.Use(async (HttpContext context, RequestDelegate next) =>
         {
             context.Response.OnStarting(() =>
             {

@@ -8,6 +8,7 @@ public class User
     public Device? Device { get; set; }
     
     [MaxLength(50)]
+    [Required]
     public required string Email { get; set; }
     public bool EmailVerified { get; set; }
     [MaxLength(200)]

@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<Device> Devices { get; set; }
     public DbSet<WebAuthnCredential> WebAuthnCredentials { get; set; }
     public DbSet<OAuthClient> OAuthClients { get; set; }
+    public DbSet<JwtTokenEntry> JwtTokens { get; set; }
     public DbSet<AuthorizationCode> AuthorizationCodes { get; set; }
     public DbSet<RefreshToken> RefreshTokens { get; set; }
 

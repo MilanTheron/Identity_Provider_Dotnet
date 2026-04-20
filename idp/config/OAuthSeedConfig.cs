@@ -11,13 +11,17 @@ public class OAuthSeedConfig : IConfigureApp
         using var scope = app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        if (!db.OAuthClients.Any(c => c.ClientId == "myclient"))
+        if (!db.OAuthClients.Any(c => c.ClientId == "miniflux"))
         {
             db.OAuthClients.Add(new OAuthClient
             {
-                ClientId = "myclient",
-                RedirectUris = new List<string> { "https://localhost:5002/callback" },
-                RequirePkce = true
+                ClientId = "miniflux",
+                RedirectUris = new List<string> 
+                { 
+                    "http://localhost:8081/oauth2/oidc/callback"
+                },
+                RequirePkce = true,
+                AllowedScopes = new List<string> { "openid", "profile", "email" }
             });
             db.SaveChanges();
         }

@@ -326,6 +326,11 @@ curl -X POST http://localhost:5000/api/auth/register   -H "Content-Type: applica
 http://localhost:5000/Auth
 ```
 
+### Miniflux page
+```bash
+http://localhost:8081
+```
+
 ### Check if a mail has been sent to the user (using MailHog):
 ```bash
 http://localhost:8025

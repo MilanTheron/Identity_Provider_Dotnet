@@ -21,6 +21,7 @@ namespace idp.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly IConfiguration _configuration;
     private readonly ErrorService _errorService;
     private readonly PasswordService _passwordService;
     private readonly BackupCodeService _backupCodeService;
@@ -31,6 +32,7 @@ public class AuthController : ControllerBase
     
     public AuthController(
         AppDbContext context,
+        IConfiguration configuration,
         ErrorService errorService,
         PasswordService passwordService,
         BackupCodeService backupCodeService,
@@ -40,6 +42,7 @@ public class AuthController : ControllerBase
         ILogger<AuthController> logger)
     {
         _context = context;
+        _configuration = configuration;
         _errorService = errorService;
         _passwordService = passwordService;
         _backupCodeService = backupCodeService;
@@ -91,7 +94,7 @@ public class AuthController : ControllerBase
         await _context.SaveChangesAsync();
         
         var verifyUrl =
-            $"{Request.Scheme}://{Request.Host}/api/email/verify-email" +
+            _configuration["Jwt:Issuer"] + "/api/email/verify-email" +
             $"?token={Uri.EscapeDataString(rawToken)}&userId={user.Id}";
         _logger.LogInformation("Verify URL: {Url}", verifyUrl);
         

@@ -4,18 +4,21 @@ using System.Security.Cryptography;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.AspNetCore.WebUtilities;
 using System.Text;
+using idp.Data;
 using idp.Models;
 
 namespace idp.Services;
 
 public class TokenService
 {
+    private readonly AppDbContext _context;
     private readonly IConfiguration _configuration;
     private readonly ILogger<TokenService> _logger;
     private readonly byte[] _hmacKey;
 
-    public TokenService(IConfiguration configuration, ILogger<TokenService> logger)
+    public TokenService(AppDbContext context, IConfiguration configuration, ILogger<TokenService> logger)
     {
+        _context = context;
         _configuration = configuration;
         _logger = logger;
         
@@ -41,6 +44,9 @@ public class TokenService
         var bytes = RandomNumberGenerator.GetBytes(32);
         var jti = WebEncoders.Base64UrlEncode(bytes);
         var now = DateTime.UtcNow;
+        
+        Console.WriteLine($"Generating JWT for user {user.Id}, email: {user.Email}, " +
+                          $"MFA: {mfaVerified}, Scope: {scope}, ClientId: {clientId}");
         
         var claims = new List<Claim>
         {
@@ -70,7 +76,7 @@ public class TokenService
             expires: expiry,
             signingCredentials: creds);
         
-        await SecurityService.StoreJtiAsync(jti, expiry);
+        await SecurityService.StoreJtiAsync(_context, jti, expiry);
         
         return (new JwtSecurityTokenHandler().WriteToken(token), jti);
     }

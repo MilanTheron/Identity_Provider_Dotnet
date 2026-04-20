@@ -1,12 +1,12 @@
-﻿using System.Collections.Concurrent;
+﻿using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
+using idp.Models;
+using idp.Data;
 
 namespace idp.Services;
 
 public class SecurityService
 {
-    private static readonly ConcurrentDictionary<string, DateTime> ValidJtis = new();
-    
     public static RSA Rsa => _rsa.Value;
     private static readonly Lazy<RSA> _rsa = new(() =>
     {
@@ -27,36 +27,44 @@ public class SecurityService
     });
 
     // JTI validation
-    public static Task<bool> ValidateJtiAsync(string jti)
+    public static async Task<bool> ValidateJtiAsync(AppDbContext db, string jti)
     {
-        if (string.IsNullOrEmpty(jti))
-            return Task.FromResult(false);
+        var entry = await db.JwtTokens
+            .FirstOrDefaultAsync(x => x.Jti == jti);
 
-        if (!ValidJtis.TryGetValue(jti, out var expiry))
-            return Task.FromResult(false);
+        if (entry == null)
+            return false;
 
-        if (DateTime.UtcNow > expiry)
+        if (DateTime.UtcNow > entry.Expiry)
         {
-            ValidJtis.TryRemove(jti, out _);
-            return Task.FromResult(false);
+            db.JwtTokens.Remove(entry);
+            await db.SaveChangesAsync();
+            return false;
         }
 
-        return Task.FromResult(true);
+        return true;
     }
 
-    public static Task StoreJtiAsync(string jti, DateTime expiry)
+    public static async Task StoreJtiAsync(AppDbContext db, string jti, DateTime expiry)
     {
-        if (!string.IsNullOrEmpty(jti))
-            ValidJtis[jti] = expiry;
+        db.JwtTokens.Add(new JwtTokenEntry
+        {
+            Jti = jti,
+            Expiry = expiry
+        });
 
-        return Task.CompletedTask;
+        await db.SaveChangesAsync();
     }
-
-    public static Task RevokeJtiAsync(string jti)
+    
+    public static async Task RevokeJtiAsync(AppDbContext db, string jti)
     {
-        if (!string.IsNullOrEmpty(jti))
-            ValidJtis.TryRemove(jti, out _);
+        var entry = await db.JwtTokens
+            .FirstOrDefaultAsync(x => x.Jti == jti);
 
-        return Task.CompletedTask;
+        if (entry != null)
+        {
+            db.JwtTokens.Remove(entry);
+            await db.SaveChangesAsync();
+        }
     }
 }

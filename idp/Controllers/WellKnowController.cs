@@ -20,50 +20,60 @@ public class WellKnownController : ControllerBase
     [HttpGet("openid-configuration")]
     public IActionResult OpenIdConfiguration()
     {
-        var issuer = $"{Request.Scheme}://{Request.Host}";
+        var scheme = Request.Scheme;
+        var host = Request.Host.ToString();
+        
+        var publicIssuer = _configuration["Jwt:Issuer"];
+        
+        string endpointBase;
+        if (host.StartsWith("localhost") || host.StartsWith("127.0.0.1"))
+            endpointBase = $"{scheme}://localhost:5000";
+        else
+            endpointBase = $"{scheme}://idp:8080";
+
         var config = new
         {
-            issuer = issuer,
-            
-            //OAuth
-            authorization_endpoint = $"{issuer}/api/oauth/authorize",
-            token_endpoint = $"{issuer}/api/oauth/token",
-            
-            // Webauthn
-            webAuthnRegisterStart_endpoint = $"{issuer}/api/webauthn/register/start",
-            webAuthnRegisterFinish_endpoint = $"{issuer}/api/webauthn/register/finish",
-            webAuthnLoginStart_endpoint = $"{issuer}/api/webauthn/login/start",
-            webAuthnLoginFinish_endpoint = $"{issuer}/api/webauthn/login/finish",
-            
-            // Authentication
-            register_endpoint = $"{issuer}/api/auth/register",
-            login_endpoint =  $"{issuer}/api/auth/login",
-            logout_endpoint = $"{issuer}/api/auth/logout",
-            logout_session_endpoint = $"{issuer}/api/auth/logout/session",
-            
-            // Email
-            verify_email_endpoint = $"{issuer}/api/email/verify-email",
-            resend_verification_endpoint = $"{issuer}/api/email/resend-verification",
-            forgot_password_endpoint = $"{issuer}/api/email/forgot-password",
-            reset_password_endpoint = $"{issuer}/api/email/reset-password",
-            
-            // Userinfo
-            userinfo_endpoint = $"{issuer}/userinfo",
-            
-            // Totp
-            setup_totp_endpoint = $"{issuer}/api/totp/setup-totp",
-            verify_totp_endpoint = $"{issuer}/api/totp/verify-totp",
-            request_totp_fallback_endpoint = $"{issuer}/api/totp/request-totp-fallback",
-            verify_totp_fallback_endpoint = $"{issuer}/api/totp/verify-totp-fallback",
-            
-            // OpenID Connect metadata
+            issuer = publicIssuer,
+
+            authorization_endpoint = $"{endpointBase}/api/oauth/authorize",
+            token_endpoint = $"{endpointBase}/api/oauth/token",
+            userinfo_endpoint = $"{endpointBase}/userinfo",
+            jwks_uri = $"{endpointBase}/.well-known/jwks",
+
             response_types_supported = new[] { "code" },
-            subject_types_supported = new[] { "public" },
+            subject_types_supported = new[]
+            {
+                "public", 
+                "pairwise"
+            },
             id_token_signing_alg_values_supported = new[] { "RS256" },
+
             scopes_supported = new[] { "openid", "profile", "email" },
-            token_endpoint_auth_methods_supported = new[] { "client_secret_post" },
+
+            grant_types_supported = new[]
+            {
+                "authorization_code",
+                "refresh_token"
+            },
+
+            code_challenge_methods_supported = new[] { "S256" },
             
-            jwks_uri = $"{issuer}/.well-known/jwks"
+            response_modes_supported = new[]
+            {
+                "query",
+                "fragment",
+                "form_post"
+            },
+
+            token_endpoint_auth_methods_supported = new[]
+            {
+                "client_secret_post"
+            },
+
+            claims_supported = new[]
+            {
+                "sub", "email", "email_verified"
+            }
         };
         return Ok(config);
     }
