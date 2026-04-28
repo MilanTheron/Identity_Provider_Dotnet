@@ -41,12 +41,11 @@ public class JwtAuthConfig : IConfigureServices
                 options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
                 options.Cookie.SameSite = SameSiteMode.Lax;
 
-                options.LoginPath = "/api/auth/login";
+                options.LoginPath = "/Auth";
                 options.LogoutPath = "/api/auth/logout/session";
                 options.ExpireTimeSpan = TimeSpan.FromHours(1);
                 options.SlidingExpiration = true;
 
-                // IMPORTANT: API mode (no redirects)
                 options.Events.OnRedirectToLogin = ctx =>
                 {
                     ctx.Response.StatusCode = 401;
@@ -56,7 +55,9 @@ public class JwtAuthConfig : IConfigureServices
                 options.Events.OnRedirectToAccessDenied = ctx =>
                 {
                     ctx.Response.StatusCode = 403;
-                    return Task.CompletedTask;
+                    ctx.Response.ContentType = "application/json";
+
+                    return ctx.Response.WriteAsync("{\"error\":\"Access denied\"}");
                 };
             })
             .AddJwtBearer(options =>
@@ -114,8 +115,10 @@ public class JwtAuthConfig : IConfigureServices
                         }
                         
                         var clientId = principal?.FindFirst("client_id")?.Value;
-                        var aud = principal?.FindFirst(JwtRegisteredClaimNames.Aud)?.Value
-                                  ?? principal?.FindFirst("aud")?.Value;
+                        string? aud = principal?.FindFirst("aud")?.Value;
+
+                        if (aud == null && context.SecurityToken is JwtSecurityToken jwt)
+                            aud = jwt.Audiences.FirstOrDefault();
                         
                         if (string.IsNullOrEmpty(clientId))
                         {

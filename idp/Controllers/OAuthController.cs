@@ -35,12 +35,21 @@ public class OAuthController : ControllerBase
     [HttpGet("authorize")]
     public async Task<IActionResult> Authorize([FromQuery] AuthorizeRequest request)
     {
+        Console.WriteLine("=== AUTHORIZE ===");
+        Console.WriteLine($"client_id: {request.ClientId}");
+        Console.WriteLine($"redirect_uri: {request.RedirectUri}");
+        Console.WriteLine($"state: {request.State}");
+        Console.WriteLine($"code_challenge: {request.CodeChallenge}");
+        
         if (User.Identity == null || !User.Identity.IsAuthenticated)
-            return Redirect($"/login?returnUrl={Uri.EscapeDataString(Request.Path + Request.QueryString)}");
+        {
+            var returnUrl = $"{Request.Path}{Request.QueryString}";
+            return Redirect($"/Auth?Mode=login&returnUrl={Uri.EscapeDataString(returnUrl)}");
+        }
 
         if (request.ResponseType != "code")
             return BadRequest(new { error = "invalid_response_type" });
-        
+
         var client = await _context.Set<OAuthClient>()
             .SingleOrDefaultAsync(c => c.ClientId == request.ClientId);
         
@@ -71,12 +80,6 @@ public class OAuthController : ControllerBase
         if (string.IsNullOrEmpty(request.RedirectUri))
             return BadRequest(new { error = "invalid_RedirectUri" });
         
-        Console.WriteLine("=== AUTHORIZE ===");
-        Console.WriteLine($"client_id: {request.ClientId}");
-        Console.WriteLine($"redirect_uri: {request.RedirectUri}");
-        Console.WriteLine($"state: {request.State}");
-        Console.WriteLine($"code_challenge: {request.CodeChallenge}");
-        
         var code = TokenService.GenerateSecureToken();
         
         var scope = string.IsNullOrWhiteSpace(request.Scope)
@@ -96,7 +99,6 @@ public class OAuthController : ControllerBase
             UserId = userId
         };
         
-        Console.WriteLine($"AuthCode stored:");
         Console.WriteLine($"challenge: {authCode.CodeChallenge}");
         Console.WriteLine($"method: {authCode.CodeChallengeMethod}");
         
@@ -146,13 +148,13 @@ public class OAuthController : ControllerBase
             requestedScopes.Any(s => !client.AllowedScopes.Contains(s)))
             return _errorService.BadReq("invalid_scope");
         
-        Console.WriteLine("=== AUTHORIZE ===");
+        Console.WriteLine("=== TOKEN ===");
         Console.WriteLine($"client_id: {client.ClientId}");
         Console.WriteLine($"redirect_uri: {request.RedirectUri}");
         Console.WriteLine($"code: {request.Code}");
+        Console.WriteLine($"code_verifier: {request.CodeVerifier}");
         Console.WriteLine($"code_challenge: {authCode.CodeChallenge}");
         Console.WriteLine($"code_challenge_method: {authCode.CodeChallengeMethod}");
-        Console.WriteLine($"code_verifier: {request.CodeVerifier}");
         
         // PKCE
         if (authCode.CodeChallengeMethod != "S256")

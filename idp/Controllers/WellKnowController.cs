@@ -20,25 +20,16 @@ public class WellKnownController : ControllerBase
     [HttpGet("openid-configuration")]
     public IActionResult OpenIdConfiguration()
     {
-        var scheme = Request.Scheme;
-        var host = Request.Host.ToString();
-        
         var publicIssuer = _configuration["Jwt:Issuer"];
         
-        string endpointBase;
-        if (host.StartsWith("localhost") || host.StartsWith("127.0.0.1"))
-            endpointBase = $"{scheme}://localhost:5000";
-        else
-            endpointBase = $"{scheme}://idp:8080";
-
         var config = new
         {
             issuer = publicIssuer,
 
-            authorization_endpoint = $"{endpointBase}/api/oauth/authorize",
-            token_endpoint = $"{endpointBase}/api/oauth/token",
-            userinfo_endpoint = $"{endpointBase}/userinfo",
-            jwks_uri = $"{endpointBase}/.well-known/jwks",
+            authorization_endpoint = $"{publicIssuer}/api/oauth/authorize",
+            token_endpoint = $"{publicIssuer}/api/oauth/token",
+            userinfo_endpoint = $"{publicIssuer}/userinfo",
+            jwks_uri = $"{publicIssuer}/.well-known/jwks",
 
             response_types_supported = new[] { "code" },
             subject_types_supported = new[]

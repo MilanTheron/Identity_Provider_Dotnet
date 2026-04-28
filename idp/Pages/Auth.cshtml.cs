@@ -15,7 +15,6 @@ namespace idp.Pages;
 public class AuthModel : PageModel
 {
     private readonly AppDbContext _context;
-    private readonly IConfiguration _configuration;
     private readonly PasswordService _passwordService;
     private readonly LoginDelayService _delayService;
     private readonly ErrorService _errorService;
@@ -28,8 +27,7 @@ public class AuthModel : PageModel
         LoginDelayService delayService,
         ErrorService errorService,
         SendEmailService emailService,
-        AuthService authService,
-        IConfiguration configuration)
+        AuthService authService)
     {
         _context = context;
         _passwordService = passwordService;
@@ -37,7 +35,6 @@ public class AuthModel : PageModel
         _errorService = errorService;
         _emailService = emailService;
         _authService = authService;
-        _configuration = configuration;
     }
 
     [BindProperty]
@@ -67,6 +64,9 @@ public class AuthModel : PageModel
     public string Message { get; set; }
 
     private string _key;
+    
+    [BindProperty(SupportsGet = true)]
+    public string? ReturnUrl { get; set; }
 
     public async Task<IActionResult> OnPostAsync()
     {
@@ -111,9 +111,7 @@ public class AuthModel : PageModel
 
         await _context.SaveChangesAsync();
 
-        var resetUrl =
-            _configuration["Jwt:Issuer"]+ "/ResetPassword" +
-            $"?token={Uri.EscapeDataString(rawToken)}&userId={user.Id}";
+        var resetUrl = $"{GetEmailBaseUrl()}/api/ResetPassword?token={Uri.EscapeDataString(rawToken)}&userId={user.Id}";
 
         await _emailService.SendEmail(user.Email, "Reset your password", resetUrl);
 
@@ -136,9 +134,8 @@ public class AuthModel : PageModel
         
         await _context.SaveChangesAsync();
 
-        var verifyUrl =
-            _configuration["Jwt:Issuer"] + "/api/email/verify-email" +
-            $"?token={Uri.EscapeDataString(rawToken)}&userId={user.Id}";
+        var verifyUrl = $"{GetEmailBaseUrl()}/api/email/verify-email?token={Uri.EscapeDataString(rawToken)}&userId={user.Id}";
+
         await _emailService.SendEmail(user.Email, "Verify your email", verifyUrl);
 
         Message = "A new verification mail as been sent.";
@@ -183,9 +180,7 @@ public class AuthModel : PageModel
         
         try
         {
-            var verifyUrl =
-                _configuration["Jwt:Issuer"] + "/api/email/verify-email" +
-                $"?token={Uri.EscapeDataString(rawToken)}&userId={user.Id}";
+            var verifyUrl = $"{GetEmailBaseUrl()}/api/email/verify-email?token={Uri.EscapeDataString(rawToken)}&userId={user.Id}";
 
             await _emailService.SendEmail(user.Email, "Verify your email", verifyUrl);
         }
@@ -195,26 +190,30 @@ public class AuthModel : PageModel
         }
         
         Message = "User registered. Verify email before login.";
-        return Page();
+        if (!string.IsNullOrEmpty(ReturnUrl) && Url.IsLocalUrl(ReturnUrl))
+        {
+            return Redirect(ReturnUrl);
+        }
+        return RedirectToPage("/Auth", new { mode = "login", returnUrl = ReturnUrl });
     }
 
     private async Task<IActionResult> HandleLogin()
     {
         if (string.IsNullOrEmpty(Email) || string.IsNullOrEmpty(Password))
             return await Fail(_key, ErrorCodes.InvalidRequest);
-        
+    
         var user = await _context.Users
             .SingleOrDefaultAsync(u => u.Email == Email);
-        
+    
         if (user == null)
             return await Fail(_key, ErrorCodes.InvalidCredentials);
 
         if (!user.EmailVerified)
             return await Fail(_key, ErrorCodes.EmailNotVerified);
-        
+    
         if (!_passwordService.VerifyPassword(Password, user.PasswordHash))
             return await Fail(_key, ErrorCodes.InvalidCredentials);
-        
+
         // Reset delay on correct password
         _delayService.Reset(_key);
         
@@ -247,7 +246,28 @@ public class AuthModel : PageModel
         await HttpContext.SignInAsync("AuthScheme", principal);
         
         Message = "Login Successful";
+        if (!string.IsNullOrEmpty(ReturnUrl) && Url.IsLocalUrl(ReturnUrl))
+        {
+            return Redirect(ReturnUrl);
+        }
         return Page();
+    }
+    
+    private string GetEmailBaseUrl()
+    {
+        var scheme = Request.Scheme;
+        var host = Request.Host.Host;
+    
+        var port = Request.Host.Port;
+        if (port.HasValue && port.Value != 80 && port.Value != 443)
+        {
+            return $"{scheme}://{host}:{port}";
+        }
+    
+        if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase) && !port.HasValue)
+            return $"{scheme}://{host}:5000";
+    
+        return $"{scheme}://{host}";
     }
     
     private async Task<IActionResult> Fail(string key, string error)

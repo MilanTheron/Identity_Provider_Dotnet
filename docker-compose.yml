@@ -13,8 +13,8 @@
       - ./idp/keys:/app/keys
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - Jwt__Issuer=http://localhost:5000
-      - Fido__Origin=http://localhost:5000
+      - Jwt__Issuer=http://idp.localtest.me
+      - Fido__Origin=http://idp.localtest.me
       - Smtp__Host=mailhog
       - Smtp__Port=1025
       - Smtp__From=noreply@local.testidp
@@ -26,7 +26,7 @@
     ports:
       - "8025:8025"
       - "1025:1025"
-  
+
   miniflux:
     image: miniflux/miniflux:latest
     container_name: miniflux_app
@@ -38,7 +38,7 @@
     ports:
       - "8081:8080"
     extra_hosts:
-      - "localhost:host-gateway"
+      - "idp.localtest.me:host-gateway"
     environment:
       - DATABASE_URL=postgres://miniflux:miniflux@db/miniflux?sslmode=disable
       - RUN_MIGRATIONS=1
@@ -49,13 +49,13 @@
       - OAUTH2_PROVIDER=oidc
       - OAUTH2_CLIENT_ID=miniflux
       - OAUTH2_CLIENT_SECRET=super-secret
-      - OAUTH2_REDIRECT_URL=http://localhost:8081/oauth2/oidc/callback
-      - OAUTH2_OIDC_DISCOVERY_ENDPOINT=http://localhost:5000
+      - OAUTH2_REDIRECT_URL=http://miniflux.localtest.me/oauth2/oidc/callback
+      - OAUTH2_OIDC_DISCOVERY_ENDPOINT=http://idp.localtest.me
 
   db:
     image: postgres:18
     container_name: miniflux_db
-    environment:
+    environment:  
       - POSTGRES_DB=miniflux
       - POSTGRES_USER=miniflux
       - POSTGRES_PASSWORD=miniflux
@@ -66,6 +66,22 @@
       interval: 5s
       timeout: 5s
       retries: 5
-        
+  
+  caddy:
+    image: caddy:latest
+    container_name: gateway
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - idp
+      - miniflux
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:

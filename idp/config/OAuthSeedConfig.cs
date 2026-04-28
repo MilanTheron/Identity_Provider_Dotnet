@@ -1,5 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
-using idp.Data;
+﻿using idp.Data;
 using idp.Models;
 
 namespace idp.config;
@@ -18,7 +17,7 @@ public class OAuthSeedConfig : IConfigureApp
                 ClientId = "miniflux",
                 RedirectUris = new List<string> 
                 { 
-                    "http://localhost:8081/oauth2/oidc/callback"
+                    "http://miniflux.localtest.me/oauth2/oidc/callback"
                 },
                 RequirePkce = true,
                 AllowedScopes = new List<string> { "openid", "profile", "email" }
