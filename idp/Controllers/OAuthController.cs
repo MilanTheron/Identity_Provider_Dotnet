@@ -40,11 +40,17 @@ public class OAuthController : ControllerBase
         Console.WriteLine($"redirect_uri: {request.RedirectUri}");
         Console.WriteLine($"state: {request.State}");
         Console.WriteLine($"code_challenge: {request.CodeChallenge}");
+        Console.WriteLine($"User is authenticated: {User.Identity?.IsAuthenticated}");
+        Console.WriteLine($"Cookie keys count: {HttpContext.Request.Cookies.Keys.Count}");
+        Console.WriteLine($"Cookie: {HttpContext.Request.Headers.Cookie.ToString()}");
+        Console.WriteLine("Auth type: " + User.Identity?.AuthenticationType);
+        Console.WriteLine("Is auth: " + User.Identity?.IsAuthenticated);
+        Console.WriteLine("Claims: " + string.Join(",", User.Claims.Select(c => $"{c.Type}:{c.Value}")));
         
         if (User.Identity == null || !User.Identity.IsAuthenticated)
         {
             var returnUrl = $"{Request.Path}{Request.QueryString}";
-            return Redirect($"/Auth?Mode=login&returnUrl={Uri.EscapeDataString(returnUrl)}");
+            return Redirect($"/Auth?Mode=register&returnUrl={Uri.EscapeDataString(returnUrl)}");
         }
 
         if (request.ResponseType != "code")
@@ -62,9 +68,14 @@ public class OAuthController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.State))
             return BadRequest(new { error = "invalid_state" });
         
-        var userId = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
-        if (string.IsNullOrEmpty(userId))
+        var userIdStr = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value;
+
+        if (!Guid.TryParse(userIdStr, out var userId))
             return BadRequest(new { error = "invalid_user_id" });
+
+        var user = await _context.Users.FindAsync(userId);
+        if (user != null && !user.EmailVerified)
+            return BadRequest(ErrorCodes.EmailNotVerified);
         
         if (string.IsNullOrEmpty(request.CodeChallenge) ||
             request.CodeChallenge.Length > 128 ||
@@ -96,7 +107,7 @@ public class OAuthController : ControllerBase
             Scope = scope,
             ExpiresAt = DateTime.UtcNow.AddMinutes(5),
             Used = false,
-            UserId = userId
+            UserId = userIdStr
         };
         
         Console.WriteLine($"challenge: {authCode.CodeChallenge}");
@@ -178,7 +189,7 @@ public class OAuthController : ControllerBase
         if (!Guid.TryParse(authCode.UserId, out var guid))
             return _errorService.AuthError(ErrorCodes.Unauthorized);
         
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == guid);
+        var user = await _context.Users.FindAsync(guid);
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
         

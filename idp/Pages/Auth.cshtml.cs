@@ -190,10 +190,6 @@ public class AuthModel : PageModel
         }
         
         Message = "User registered. Verify email before login.";
-        if (!string.IsNullOrEmpty(ReturnUrl) && Url.IsLocalUrl(ReturnUrl))
-        {
-            return Redirect(ReturnUrl);
-        }
         return RedirectToPage("/Auth", new { mode = "login", returnUrl = ReturnUrl });
     }
 

@@ -38,8 +38,8 @@ public class JwtAuthConfig : IConfigureServices
             .AddCookie("AuthScheme", options =>
             {
                 options.Cookie.HttpOnly = true;
-                options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
                 options.Cookie.SameSite = SameSiteMode.Lax;
+                options.Cookie.SecurePolicy = CookieSecurePolicy.None;
 
                 options.LoginPath = "/Auth";
                 options.LogoutPath = "/api/auth/logout/session";
