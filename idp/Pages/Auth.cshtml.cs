@@ -190,7 +190,7 @@ public class AuthModel : PageModel
         }
         
         Message = "User registered. Verify email before login.";
-        return RedirectToPage("/Auth", new { mode = "login", returnUrl = ReturnUrl });
+        return Page();
     }
 
     private async Task<IActionResult> HandleLogin()

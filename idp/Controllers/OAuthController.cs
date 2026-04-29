@@ -50,7 +50,7 @@ public class OAuthController : ControllerBase
         if (User.Identity == null || !User.Identity.IsAuthenticated)
         {
             var returnUrl = $"{Request.Path}{Request.QueryString}";
-            return Redirect($"/Auth?Mode=register&returnUrl={Uri.EscapeDataString(returnUrl)}");
+            return Redirect($"/Auth?Mode=login&returnUrl={Uri.EscapeDataString(returnUrl)}");
         }
 
         if (request.ResponseType != "code")

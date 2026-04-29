@@ -18,6 +18,8 @@
         @Html.AntiForgeryToken()
 
         <input type="hidden" name="Mode" value="@Model.Mode" />
+        
+        <input type="hidden" asp-for="ReturnUrl" />
 
         <!-- EMAIL -->
         <input asp-for="Email" placeholder="Email" />
@@ -70,6 +72,7 @@
     {
         <form method="get">
             <input type="hidden" name="Mode" value="forgot" />
+            <input type="hidden" name="ReturnUrl" value="@Model.ReturnUrl" />
             <button type="submit" class="link-btn">
                 Forgot password?
             </button>
@@ -80,6 +83,7 @@
     <form method="get">
         <input type="hidden" name="Mode"
                value="@(Model.Mode == "login" ? "register" : "login")" />
+        <input type="hidden" name="ReturnUrl" value="@Model.ReturnUrl" />
         <button type="submit">
             Switch to @(Model.Mode == "login" ? "Register" : "Login")
         </button>
