@@ -62,6 +62,9 @@ public class TokenService
                 ClaimValueTypes.Integer64)
         };
         
+        if (scope.Contains("profile"))
+            claims.Add(new Claim(JwtRegisteredClaimNames.Name, user.Email.Split('@')[0]));
+        
         var rsa = SecurityService.Rsa;
         var keyId = _configuration["Jwt:KeyId"];
         var key = new RsaSecurityKey(rsa) { KeyId = keyId };
@@ -83,40 +86,49 @@ public class TokenService
     
     public async Task<string> GenerateIdToken(User user, string clientId, string? nonce)
     {
-        _logger.LogInformation("Generating ID token for user {UserId}", user.Id);
-        
         var now = DateTime.UtcNow;
-        
+        var expiry = now.AddMinutes(30);
+    
         var claims = new List<Claim>
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
             new Claim(JwtRegisteredClaimNames.Email, user.Email),
             new Claim("email_verified", user.EmailVerified ? "true" : "false"),
             new Claim("azp", clientId),
+            new Claim(JwtRegisteredClaimNames.Aud, clientId),
             new Claim(JwtRegisteredClaimNames.Iat,
+                DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
+                ClaimValueTypes.Integer64),
+            new Claim(JwtRegisteredClaimNames.Exp,
+                DateTimeOffset.UtcNow.AddMinutes(30).ToUnixTimeSeconds().ToString(),
+                ClaimValueTypes.Integer64),
+            new Claim(JwtRegisteredClaimNames.Nbf,
                 DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
                 ClaimValueTypes.Integer64)
         };
-        
+    
         if (!string.IsNullOrEmpty(nonce))
             claims.Add(new Claim(JwtRegisteredClaimNames.Nonce, nonce));
-        
+    
+        claims.Add(new Claim(JwtRegisteredClaimNames.Name, user.Email.Split('@')[0]));
+    
         var rsa = SecurityService.Rsa;
         var keyId = _configuration["Jwt:KeyId"];
         var key = new RsaSecurityKey(rsa) { KeyId = keyId };
         var creds = new SigningCredentials(key, SecurityAlgorithms.RsaSha256);
-        
+    
         var token = new JwtSecurityToken(
             issuer: _configuration["Jwt:Issuer"],
             audience: clientId,
             claims: claims,
             notBefore: now,
-            expires: now.AddMinutes(30),
+            expires: expiry,
             signingCredentials: creds
         );
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
+
 
     public static string GenerateSecureToken()
     {

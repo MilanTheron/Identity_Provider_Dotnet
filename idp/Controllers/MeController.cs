@@ -12,17 +12,35 @@ public class MeController : ControllerBase
     [HttpGet("/userinfo")]
     public IActionResult UserInfo()
     {
+        Console.WriteLine("=== Claims ===");
         foreach (var claim in User.Claims)
-        {
             Console.WriteLine($"{claim.Type} = {claim.Value}");
+        
+        var scope = User.FindFirst("scope")?.Value ?? "";
+
+        var response = new Dictionary<string, object>
+        {
+            { "sub", User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value 
+                     ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value }
+        };
+
+        if (scope.Contains("email"))
+        {
+            response["email"] = User.FindFirst("email")?.Value;
+            response["email_verified"] = User.FindFirst("email_verified")?.Value == "true";
+        }
+
+        if (scope.Contains("profile"))
+        {
+            var name = User.FindFirst(JwtRegisteredClaimNames.Name)?.Value;
+            if (!string.IsNullOrEmpty(name))
+                response["name"] = name;
         }
         
-        return Ok(new
-        {
-            sub = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
-                  ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value,
-            email = User.FindFirst("email")?.Value,
-            email_verified = User.FindFirst("email_verified")?.Value == "true"
-        });
+        Console.WriteLine("=== Response ===");
+        foreach (KeyValuePair<string, object> kvp in response)
+            Console.WriteLine("{0}: {1}", kvp.Key, kvp.Value);
+        
+        return Ok(response);
     }
 }

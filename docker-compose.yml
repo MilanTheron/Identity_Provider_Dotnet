@@ -41,12 +41,14 @@
       - CREATE_ADMIN=1
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD=adminadmin
+      - DEBUG=1
         
       - OAUTH2_PROVIDER=oidc
       - OAUTH2_CLIENT_ID=miniflux
       - OAUTH2_CLIENT_SECRET=super-secret
       - OAUTH2_REDIRECT_URL=http://miniflux.localtest.me/oauth2/oidc/callback
       - OAUTH2_OIDC_DISCOVERY_ENDPOINT=http://idp.localtest.me
+      - OAUTH2_USER_CREATION=1
 
   db:
     image: postgres:18
