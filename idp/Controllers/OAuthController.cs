@@ -102,6 +102,7 @@ public class OAuthController : ControllerBase
             Code = code,
             ClientId = request.ClientId,
             RedirectUri = request.RedirectUri,
+            Nonce = request.Nonce,
             CodeChallenge = request.CodeChallenge,
             CodeChallengeMethod = request.CodeChallengeMethod,
             Scope = scope,
@@ -130,11 +131,29 @@ public class OAuthController : ControllerBase
         if (request.GrantType != "authorization_code")
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
         
-        var client = await _context.Set<OAuthClient>()
-            .SingleOrDefaultAsync(c => c.ClientId == request.ClientId);
+        string? clientId = request.ClientId;
+        string? clientSecret = request.ClientSecret;
+
+        var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+
+        if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Basic "))
+        {
+            var encoded = authHeader.Substring("Basic ".Length);
+            var decoded = Encoding.UTF8.GetString(Convert.FromBase64String(encoded));
+            var parts = decoded.Split(':', 2);
+
+            if (parts.Length == 2)
+            {
+                clientId = parts[0];
+                clientSecret = parts[1];
+            }
+        }
         
-        if (client == null)
-            return _errorService.BadReq(ErrorCodes.InvalidRequest);
+        var client = await _context.Set<OAuthClient>()
+            .SingleOrDefaultAsync(c => c.ClientId == clientId);
+
+        if (client == null || client.ClientSecret != clientSecret)
+            return _errorService.AuthError("invalid_client");
         
         if (string.IsNullOrEmpty(request.Code))
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
@@ -145,7 +164,7 @@ public class OAuthController : ControllerBase
         if (authCode == null || authCode.Used ||
             authCode.ExpiresAt < DateTime.UtcNow ||
             authCode.RedirectUri != request.RedirectUri ||
-            authCode.ClientId != request.ClientId)
+            authCode.ClientId != clientId)
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
         
         var scope = request.Scope ?? authCode.Scope;
@@ -209,7 +228,7 @@ public class OAuthController : ControllerBase
             authCode.Used = true;
 
             (accessToken, var jti) = await _tokenService.GenerateJwtToken(
-                user, false, scope, request.ClientId);
+                user, false, scope, clientId);
 
             refreshTokenValue = TokenService.GenerateSecureToken();
 
@@ -232,7 +251,11 @@ public class OAuthController : ControllerBase
             throw;
         }
         
-        var idToken = await _tokenService.GenerateIdToken(user, request.ClientId);
+        var idToken = await _tokenService.GenerateIdToken(
+            user,
+            clientId,
+            authCode.Nonce
+        );
         
         return Ok(new
         {

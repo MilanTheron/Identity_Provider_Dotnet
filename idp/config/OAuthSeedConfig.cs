@@ -19,6 +19,7 @@ public class OAuthSeedConfig : IConfigureApp
                 { 
                     "http://miniflux.localtest.me/oauth2/oidc/callback"
                 },
+                ClientSecret = "super-secret",
                 RequirePkce = true,
                 AllowedScopes = new List<string> { "openid", "profile", "email" }
             });

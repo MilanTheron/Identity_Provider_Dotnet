@@ -81,7 +81,7 @@ public class TokenService
         return (new JwtSecurityTokenHandler().WriteToken(token), jti);
     }
     
-    public async Task<string> GenerateIdToken(User user, string clientId)
+    public async Task<string> GenerateIdToken(User user, string clientId, string? nonce)
     {
         _logger.LogInformation("Generating ID token for user {UserId}", user.Id);
         
@@ -97,6 +97,9 @@ public class TokenService
                 DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
                 ClaimValueTypes.Integer64)
         };
+        
+        if (!string.IsNullOrEmpty(nonce))
+            claims.Add(new Claim(JwtRegisteredClaimNames.Nonce, nonce));
         
         var rsa = SecurityService.Rsa;
         var keyId = _configuration["Jwt:KeyId"];

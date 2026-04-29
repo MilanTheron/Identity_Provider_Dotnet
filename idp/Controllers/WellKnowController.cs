@@ -5,7 +5,7 @@ using idp.Services;
 
 namespace idp.Controllers;
 
-[Route(".well-known")]
+[Route("/.well-known")]
 [ApiController]
 public class WellKnownController : ControllerBase
 {
@@ -58,7 +58,8 @@ public class WellKnownController : ControllerBase
 
             token_endpoint_auth_methods_supported = new[]
             {
-                "client_secret_post"
+                "client_secret_post",
+                "client_secret_basic"
             },
 
             claims_supported = new[]

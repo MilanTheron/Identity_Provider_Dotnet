@@ -26,6 +26,11 @@ public abstract class BaseWebApp
         builder.Services.AddDataProtection()
             .PersistKeysToFileSystem(new DirectoryInfo("/app/keys"))
             .SetApplicationName("idp");
+        builder.Services.AddControllers()
+            .AddJsonOptions(options =>
+            {
+                options.JsonSerializerOptions.PropertyNamingPolicy = null;
+            });
         
         var app = builder.Build();
         

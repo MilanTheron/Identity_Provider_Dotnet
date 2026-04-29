@@ -62,7 +62,7 @@ public class JwtAuthConfig : IConfigureServices
             })
             .AddJwtBearer(options =>
             {
-                options.RequireHttpsMetadata = true;
+                // options.RequireHttpsMetadata = true;
                 
                 options.MapInboundClaims = false;
                 

@@ -18,9 +18,7 @@
       - Smtp__Host=mailhog
       - Smtp__Port=1025
       - Smtp__From=noreply@local.testidp
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://idp:8080/.well-known/openid-configuration"]
-
+  
   mailhog:
     image: mailhog/mailhog
     ports:
@@ -37,8 +35,6 @@
         condition: service_started
     ports:
       - "8081:8080"
-    extra_hosts:
-      - "idp.localtest.me:host-gateway"
     environment:
       - DATABASE_URL=postgres://miniflux:miniflux@db/miniflux?sslmode=disable
       - RUN_MIGRATIONS=1
@@ -73,6 +69,11 @@
     restart: unless-stopped
     ports:
       - "80:80"
+    networks:
+      default:
+        aliases:
+          - idp.localtest.me
+          - miniflux.localtest.me
     depends_on:
       - idp
       - miniflux
@@ -80,6 +81,10 @@
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile
       - caddy_data:/data
       - caddy_config:/config
+
+networks:
+  default:
+    name: idp-network
 
 volumes:
   pgdata:
