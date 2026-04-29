@@ -12,6 +12,10 @@ public class OAuthClient
     [MaxLength(2048)]
     public string RedirectUrisJson { get; set; } = "[]";
     public bool RequirePkce { get; set; } = true;
+    [MaxLength(2048)]
+    public string ClientSecret { get; set; } = string.Empty;
+    
+    public List<String> AllowedScopes { get; set; } = new List<String>();
 
     [NotMapped]
     public List<string> RedirectUris

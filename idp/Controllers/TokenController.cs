@@ -39,7 +39,7 @@ public class TokenController : ControllerBase
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
         
-        var requestHash = TokenService.HashToken(request.RefreshToken);
+        var requestHash = _tokenService.HashToken(request.RefreshToken);
         var storedToken = await _context.RefreshTokens
             .SingleOrDefaultAsync(rt => rt.Token == requestHash);
 
@@ -65,7 +65,7 @@ public class TokenController : ControllerBase
             return _errorService.AuthError(ErrorCodes.Unauthorized);
 
         var user = await _context.Users
-            .SingleOrDefaultAsync(u => u.Id.ToString() == storedToken.UserId);
+            .SingleOrDefaultAsync(u => u.Id == storedToken.UserId);
 
         if (user == null)
             return _errorService.AuthError(ErrorCodes.Unauthorized);
@@ -76,25 +76,24 @@ public class TokenController : ControllerBase
         storedToken.RevokedByIp = clientIp;
 
         // Generate new tokens
-        var (newAccessToken, newJti) = await _tokenService.GenerateJwtToken(user, storedToken.MfaVerified);
+        var (newAccessToken, newJti) = await _tokenService.GenerateJwtToken(user, storedToken.MfaVerified, storedToken.Scope, storedToken.ClientId);
         var newRefreshTokenValue = TokenService.GenerateSecureToken();
-        var newRefreshTokenHash = TokenService.HashToken(newRefreshTokenValue);
+        var newRefreshTokenHash = _tokenService.HashToken(newRefreshTokenValue);
         storedToken.ReplacedByToken = newRefreshTokenHash;
 
         var newRefreshToken = new RefreshToken
         {
             Token = newRefreshTokenHash,
             JwtId = newJti,
-            UserId = user.Id.ToString(),
-
+            UserId = user.Id,
             ExpiryDate = DateTime.UtcNow.AddDays(7),
-
             CreatedAt = DateTime.UtcNow,
             CreatedByIp = clientIp,
-
             MfaVerified = storedToken.MfaVerified,
             IsUsed = false,
-            IsRevoked = false
+            IsRevoked = false,
+            Scope = storedToken.Scope,
+            ClientId = storedToken.ClientId
         };
         
         _context.Add(newRefreshToken);

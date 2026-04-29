@@ -5,7 +5,7 @@ using idp.Services;
 
 namespace idp.Controllers;
 
-[Route(".well-known")]
+[Route("/.well-known")]
 [ApiController]
 public class WellKnownController : ControllerBase
 {
@@ -20,26 +20,52 @@ public class WellKnownController : ControllerBase
     [HttpGet("openid-configuration")]
     public IActionResult OpenIdConfiguration()
     {
-        var issuer = $"{Request.Scheme}://{Request.Host}";
+        var publicIssuer = _configuration["Jwt:Issuer"];
+        
         var config = new
         {
-            issuer = issuer,
-            authorization_endpoint = $"{issuer}/api/oauth/authorize",
-            token_endpoint = $"{issuer}/api/oauth/token",
+            issuer = publicIssuer,
+
+            authorization_endpoint = $"{publicIssuer}/api/oauth/authorize",
+            token_endpoint = $"{publicIssuer}/api/oauth/token",
+            userinfo_endpoint = $"{publicIssuer}/userinfo",
+            jwks_uri = $"{publicIssuer}/.well-known/jwks",
+
+            response_types_supported = new[] { "code" },
+            subject_types_supported = new[]
+            {
+                "public", 
+                "pairwise"
+            },
+            id_token_signing_alg_values_supported = new[] { "RS256" },
+
+            scopes_supported = new[] { "openid", "profile", "email" },
+
+            grant_types_supported = new[]
+            {
+                "authorization_code",
+                "refresh_token"
+            },
+
+            code_challenge_methods_supported = new[] { "S256" },
             
-            webAuthnRegisterStart_endpoint = $"{issuer}/api/webauthn/register/start",
-            webAuthnRegisterFinish_endpoint = $"{issuer}/api/webauthn/register/finish",
-            webAuthnLoginStart_endpoint = $"{issuer}/api/webauthn/login/start",
-            webAuthnLoginFinish_endpoint = $"{issuer}/api/webauthn/login/finish",
-            
-            register_endpoint = $"{issuer}/api/register",
-            totp_endpoint = $"{issuer}/api/setup-totp",
-            login_endpoint =  $"{issuer}/api/login",
-            logout_endpoint = $"{issuer}/api/logout",
-            changePassword_endpoint = $"{issuer}/api/change-password",
-            userinfo_endpoint = $"{issuer}/api/me",
-            
-            jwks_uri = $"{issuer}/.well-known/jwks",
+            response_modes_supported = new[]
+            {
+                "query",
+                "fragment",
+                "form_post"
+            },
+
+            token_endpoint_auth_methods_supported = new[]
+            {
+                "client_secret_post",
+                "client_secret_basic"
+            },
+
+            claims_supported = new[]
+            {
+                "sub", "email", "email_verified"
+            }
         };
         return Ok(config);
     }

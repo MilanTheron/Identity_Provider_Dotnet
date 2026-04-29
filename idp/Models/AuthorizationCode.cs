@@ -11,6 +11,8 @@ public class AuthorizationCode
     public string ClientId { get; set; } = string.Empty;
     [MaxLength(2048)]
     public string RedirectUri { get; set; } = string.Empty;
+    [MaxLength(2048)]
+    public string? Nonce { get; set; }
     [MaxLength(15)]
     public string CodeChallenge { get; set; } = string.Empty;
     [MaxLength(10)]

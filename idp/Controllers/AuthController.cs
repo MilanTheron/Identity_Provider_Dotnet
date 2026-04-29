@@ -2,8 +2,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
-using System.IdentityModel.Tokens.Jwt;
+using Microsoft.AspNetCore.Authentication;
 using System.Security.Cryptography;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
 using OtpNet;
 using idp.Data;
 using idp.Models;
@@ -18,136 +21,26 @@ namespace idp.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly AppDbContext _context;
-    private readonly TokenService _tokenService;
     private readonly ErrorService _errorService;
-    private readonly PasswordService _passwordService;
-    private readonly BackupCodeService _backupCodeService;
-    private readonly SendEmailService _emailService;
-    private readonly ILogger<AuthController> _logger;
-
+    private readonly TokenService _tokenService;
+    
     public AuthController(
-        AppDbContext context, 
-        TokenService tokenService, 
-        ErrorService errorService, 
-        PasswordService passwordService, 
-        BackupCodeService backupCodeService, 
-        SendEmailService emailService,
-        ILogger<AuthController> logger)
+        AppDbContext context,
+        ErrorService errorService,
+        TokenService tokenService)
     {
         _context = context;
-        _tokenService = tokenService;
         _errorService = errorService;
-        _passwordService = passwordService;
-        _backupCodeService = backupCodeService;
-        _emailService = emailService;
-        _logger = logger;
+        _tokenService = tokenService;
     }
 
-    [AllowAnonymous]
+    [Authorize]
     [EnableRateLimiting("auth")]
-    [HttpPost("register")]
-    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+    [HttpPost("logout/session")]
+    public async Task<IActionResult> LogoutSession()
     {
-        if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Password))
-            return _errorService.BadReq(ErrorCodes.InvalidRequest);
-        
-        if (await _context.Users.AnyAsync(u => u.Email == request.Email))
-            return _errorService.BadReq(ErrorCodes.InvalidRequest);
-    
-        if (await PasswordService.IsWeak(request.Password))
-            return BadRequest(@"Password is too weak, need: One maj letter, One min letter, One number, One special character([@$!%*?&^#()[\\]{}|\\\\/\\-+_.:;=,~`]), Min 12 chars");
-    
-        var user = new User
-        {
-            Email = request.Email,
-            PasswordHash = _passwordService.HashPassword(request.Password),
-            EmailVerified = false
-        };
-    
-        var rawToken = TokenService.GenerateSecureToken();
-        user.EmailVerificationTokenHash = TokenService.HashToken(rawToken);
-        user.EmailVerificationTokenExpiry = DateTime.UtcNow.AddHours(24);
-
-        var verifyUrl = $"{Request.Scheme}://{Request.Host}/api/email/verify-email?token={rawToken}&userId={user.Id}";
-
-        try
-        {
-            await _emailService.SendEmail(user.Email, "Verify your email", $"Click to verify: <a href='{verifyUrl}'>link</a>");
-            _logger.LogInformation("Verification email sent to {Email}", user.Email);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to send verification email to {Email}", user.Email);
-        }
-
-        _context.Users.Add(user); // check Async Add
-        await _context.SaveChangesAsync();
-
-        return Ok("User registered. If the email exists, a verification email has been sent.");
-    }
-
-    [AllowAnonymous]
-    [EnableRateLimiting("auth")]
-    [HttpPost("login")]
-    public async Task<IActionResult> Login([FromBody] LoginRequest request)
-    {
-        var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString();
-        if (clientIp == null)
-            return _errorService.AuthError(ErrorCodes.Unauthorized);
-
-        var user = await _context.Users
-            .SingleOrDefaultAsync(u => u.Email == request.Email);
-        if (user == null)
-            return _errorService.AuthError(ErrorCodes.Unauthorized);
-
-        var scope = request.Scope ?? "openid profile email";
-
-        if (!user.EmailVerified || string.IsNullOrEmpty(request.Password))
-            return _errorService.AuthError(ErrorCodes.InvalidCredentials);
-        
-        if (!_passwordService.VerifyPassword(request.Password, user.PasswordHash))
-            return _errorService.AuthError(ErrorCodes.InvalidCredentials);
-
-        // Password correct, now check MFA if enabled
-        var mfaVerified = false;
-
-        if (user.IsTotpEnabled)
-        {
-            if (string.IsNullOrEmpty(request.TotpCode) && string.IsNullOrEmpty(request.BackupCode))
-                return _errorService.AuthError(ErrorCodes.MfaRequired);
-            
-            if (!ValidateMfa(request, user))
-                return _errorService.BadReq(ErrorCodes.MfaRequired);
-
-            mfaVerified = true;
-        }
-
-        // Generate tokens
-        var (accessToken, jti) = await _tokenService.GenerateJwtToken(user, mfaVerified);
-        var refreshTokenValue = TokenService.GenerateSecureToken();
-        var refreshTokenHash = TokenService.HashToken(refreshTokenValue);
-
-        var refreshToken = new RefreshToken
-        {
-            Token = refreshTokenHash,
-            JwtId = jti,
-            Scope = scope,
-            UserId = user.Id.ToString(),
-
-            ExpiryDate = DateTime.UtcNow.AddDays(7),
-
-            CreatedAt = DateTime.UtcNow,
-            CreatedByIp = clientIp,
-
-            MfaVerified = mfaVerified,
-            IsUsed = false,
-            IsRevoked = false
-        };
-        
-        _context.Add(refreshToken);
-        await _context.SaveChangesAsync();
-
-        return Ok(new { AccessToken = accessToken, RefreshToken = refreshTokenValue });
+        await HttpContext.SignOutAsync("AuthScheme");
+        return Ok(new { message = "logged out" });
     }
 
     [Authorize]
@@ -162,7 +55,7 @@ public class AuthController : ControllerBase
         if (string.IsNullOrEmpty(request.RefreshToken))
             return _errorService.BadReq(ErrorCodes.InvalidRequest);
         
-        var requestHash = TokenService.HashToken(request.RefreshToken);
+        var requestHash = _tokenService.HashToken(request.RefreshToken);
         var storedToken = await _context.RefreshTokens
             .SingleOrDefaultAsync(rt => rt.Token == requestHash);
 
@@ -175,67 +68,5 @@ public class AuthController : ControllerBase
         await _context.SaveChangesAsync();
 
         return Ok("Logged out");
-    }
-
-    private bool ValidateMfa(LoginRequest request, User user)
-    {
-        // prevent both being used at once
-        if (!string.IsNullOrWhiteSpace(request.TotpCode) &&
-            !string.IsNullOrWhiteSpace(request.BackupCode))
-            return false;
-
-        // ---- TOTP ----
-        if (!string.IsNullOrWhiteSpace(request.TotpCode))
-        {
-            if (string.IsNullOrEmpty(user.TotpSecret))
-                return false;
-
-            try
-            {
-                var secretBytes = Base32Encoding.ToBytes(user.TotpSecret);
-                var totp = new Totp(secretBytes);
-
-                var window = new VerificationWindow(previous: 1, future: 1);
-
-                var code = request.TotpCode.Trim();
-
-                if (!totp.VerifyTotp(code, out var timeStepMatched, window))
-                    return false;
-
-                if (user.LastTotpStepUsed.HasValue &&
-                    user.LastTotpStepUsed.Value == timeStepMatched)
-                    return false;
-
-                user.LastTotpStepUsed = timeStepMatched;
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        // ---- Backup code ----
-        if (string.IsNullOrWhiteSpace(request.BackupCode))
-            return false;
-
-        if (user.BackupCodes.Count == 0)
-            return false;
-
-        var input = request.BackupCode.Trim();
-        var hashedInput = _backupCodeService.HashBackupCode(input);
-
-        var match = user.BackupCodes.FirstOrDefault(stored =>
-            CryptographicOperations.FixedTimeEquals(
-                Convert.FromBase64String(stored),
-                Convert.FromBase64String(hashedInput)
-            )
-        );
-
-        if (match == null)
-            return false;
-
-        user.BackupCodes.Remove(match);
-        return true;
     }
 }

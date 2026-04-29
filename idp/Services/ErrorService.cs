@@ -11,6 +11,22 @@ public class ErrorService
     {
         _httpContextAccessor = httpContextAccessor;
     }
+    
+    public string Translate(string code)
+    {
+        return code switch
+        {
+            ErrorCodes.InvalidRequest => "Invalid request",
+            ErrorCodes.InvalidCredentials => "Invalid credentials",
+            ErrorCodes.Unauthorized => "Unauthorized",
+            ErrorCodes.MfaRequired => "MFA required",
+            ErrorCodes.Conflict => "Conflict",
+            ErrorCodes.WeakPassword => "Password too weak",
+            ErrorCodes.EmailNotVerified => "Email not verified",
+            
+            _ => code
+        };
+    }
 
     public IActionResult AuthError(string code)
     {

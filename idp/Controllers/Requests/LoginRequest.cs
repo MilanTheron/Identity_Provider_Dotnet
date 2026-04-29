@@ -7,5 +7,7 @@ public class LoginRequest
     public string? TotpCode { get; set; }
     public string? BackupCode { get; set; }
     public string? Scope { get; set; }
+    public string? TotpFallbackToken { get; set; }
+    public string? ClientId { get; set; }
 }
 

@@ -1,4 +1,9 @@
-﻿namespace idp.config;
+﻿using idp.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
+
+namespace idp.config;
 
 public abstract class BaseWebApp
 {
@@ -16,8 +21,26 @@ public abstract class BaseWebApp
         foreach (var c in _configs.OfType<IConfigureServices>())
             c.ConfigureServices(builder.Configuration, builder.Services);
 
+        builder.Services.AddControllers();
+        builder.Services.AddRazorPages();
+        builder.Services.AddDataProtection()
+            .PersistKeysToFileSystem(new DirectoryInfo("/app/keys"))
+            .SetApplicationName("idp");
+        builder.Services.AddControllers()
+            .AddJsonOptions(options =>
+            {
+                options.JsonSerializerOptions.PropertyNamingPolicy = null;
+            });
+        
         var app = builder.Build();
+        
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
+            db.Database.Migrate();
+        }
+        
         foreach (var c in _configs.OfType<IConfigureApp>())
             c.ConfigureApp(app);
 

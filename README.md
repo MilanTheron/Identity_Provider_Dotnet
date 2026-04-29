@@ -15,7 +15,7 @@
 - ✅ Use strong hashing (Argon2id with 5 iterations)
 - ✅ Ensure constant-time password comparison
 - ✅ Return generic error messages for login failures
-- ⚠️ Add delay on failed authentication attempts - *NOT IMPLEMENTED*
+- ✅ Add delay on failed authentication attempts - *NOT IMPLEMENTED*
 - ✅ Enforce password policy
 - ✅ Check passwords against known breaches (Have I Been Pwned API)
 
@@ -158,7 +158,7 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 - ✅ Allow TOTP or backup code verification during login
 - ✅ Invalidate used backup codes
 - ✅ Clock drift handling
-- ❌ Email/SMS OTP fallback
+- ✅ Email/SMS OTP fallback
 
 **Files**: `BackupCodeService.cs`, `TotpController.cs`, `AuthController.cs`
 
@@ -173,12 +173,12 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 ### Implementation Status
 - ✅ IP-based rate limiting
 - ❌ Device fingerprinting
-- ❌ Store device info (IP, user-agent, timestamps)
+- ✅ Store device info (IP, user-agent, timestamps)
 - ❌ Associate refresh tokens with devices
 - ❌ Allow users to view active sessions
 - ❌ Allow revocation per device
 
-**Status**: Not started
+**Files**: `AuthController.cs`
 
 ---
 
@@ -307,6 +307,51 @@ dotnet test
 
 ---
 
+## DOCKER
+### Build and run the application using Docker:
+```bash
+docker compose up -d --build
+```
+
+### Curl to test API:
+```bash
+curl -X POST http://localhost:5000/api/auth/register   -H "Content-Type: application/json"   -d '{
+    "email": "test@example.com",
+    "password": "StrongPass1tyujsqdqs54===23!"
+    }'
+```
+
+### Login page
+```bash
+http://idp.localtest.me/Auth
+```
+
+### Check if a mail has been sent to the user (using MailHog):
+```bash
+http://idp.localtest.me:8025/
+```
+
+### Miniflux page
+```bash
+http://miniflux.localtest.me/
+```
+
+### Get log of the application:
+```bash
+docker logs idp_app
+```
+
+### Get log of the mailhog container:
+```bash
+docker logs identity_provider_dotnet-mailhog-1
+```
+
+### Get log of the mailhog container:
+```bash
+docker rm -f idp_app identity_provider_dotnet-mailhog-1
+```
+
+---
 ## Next Steps (Priority Order)
 
 ### **CRITICAL - FIX IMMEDIATELY**

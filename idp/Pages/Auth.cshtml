@@ -1,0 +1,134 @@
+﻿@page
+@using idp.Pages;
+@model AuthModel
+@{
+    ViewData["Title"] = "Auth";
+}
+
+<div class="container">
+
+    <h2>
+        @(Model.Mode == "login" ? "Login" :
+          Model.Mode == "register" ? "Register" :
+          "Forgot Password")
+    </h2>
+
+    <!-- Main form -->
+    <form method="post">
+        @Html.AntiForgeryToken()
+
+        <input type="hidden" name="Mode" value="@Model.Mode" />
+        
+        <input type="hidden" asp-for="ReturnUrl" />
+
+        <!-- EMAIL -->
+        <input asp-for="Email" placeholder="Email" />
+
+        @if (Model.Mode == "login")
+        {
+            <input asp-for="Password" type="password" placeholder="Password" />
+
+            <input asp-for="TotpCode" placeholder="TOTP (optional)" />
+            <input asp-for="BackupCode" placeholder="Backup code (optional)" />
+
+            <button type="submit" name="Action" value="login">
+                Login
+            </button>
+        }
+        else if (Model.Mode == "register")
+        {
+            <input asp-for="Password" type="password" placeholder="Password" />
+            <input asp-for="ConfirmPassword" type="password" placeholder="Confirm password" />
+
+            <button type="submit" name="Action" value="register">
+                Register
+            </button>
+        }
+        else if (Model.Mode == "forgot")
+        {
+            <button type="submit" name="Action" value="forgot">
+                Send reset link
+            </button>
+        }
+    </form>
+
+    <!-- Resend verification -->
+    @if (Model.Mode == "register")
+    {
+        <form method="post">
+            @Html.AntiForgeryToken()
+
+            <input type="hidden" asp-for="Email" />
+            <input type="hidden" name="Mode" value="register" />
+
+            <button type="submit" name="Action" value="resend">
+                Resend verification email
+            </button>
+        </form>
+    }
+
+    <!-- Forgot password link -->
+    @if (Model.Mode == "login")
+    {
+        <form method="get">
+            <input type="hidden" name="Mode" value="forgot" />
+            <input type="hidden" name="ReturnUrl" value="@Model.ReturnUrl" />
+            <button type="submit" class="link-btn">
+                Forgot password?
+            </button>
+        </form>
+    }
+
+    <!-- Switch login/register -->
+    <form method="get">
+        <input type="hidden" name="Mode"
+               value="@(Model.Mode == "login" ? "register" : "login")" />
+        <input type="hidden" name="ReturnUrl" value="@Model.ReturnUrl" />
+        <button type="submit">
+            Switch to @(Model.Mode == "login" ? "Register" : "Login")
+        </button>
+    </form>
+
+    <!-- Message -->
+    @if (!string.IsNullOrEmpty(Model.Message))
+    {
+        <div class="msg">@Model.Message</div>
+    }
+
+</div>
+
+<style>
+.container {
+    width: 320px;
+    margin: 100px auto;
+    font-family: sans-serif;
+}
+
+input, button {
+    width: 100%;
+    margin: 6px 0;
+    padding: 10px;
+    box-sizing: border-box;
+}
+
+button {
+    cursor: pointer;
+}
+
+.link-btn {
+    background: none;
+    border: none;
+    color: #007bff;
+    text-align: left;
+    padding: 0;
+}
+
+.link-btn:hover {
+    text-decoration: underline;
+}
+
+.msg {
+    margin-top: 10px;
+    color: #333;
+}
+</style>

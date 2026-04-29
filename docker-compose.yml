@@ -1,0 +1,94 @@
+﻿services:
+  idp:
+    build:
+      context: .
+      dockerfile: idp/Dockerfile
+    container_name: idp_app
+    ports:
+      - "5000:8080"
+      - "5001:5000"
+    depends_on:
+      - mailhog
+    volumes:
+      - ./idp/keys:/app/keys
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - Jwt__Issuer=http://idp.localtest.me
+      - Fido__Origin=http://idp.localtest.me
+      - Smtp__Host=mailhog
+      - Smtp__Port=1025
+      - Smtp__From=noreply@local.testidp
+  
+  mailhog:
+    image: mailhog/mailhog
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+
+  miniflux:
+    image: miniflux/miniflux:latest
+    container_name: miniflux_app
+    depends_on:
+      db:
+        condition: service_healthy
+      idp:
+        condition: service_started
+    ports:
+      - "8081:8080"
+    environment:
+      - DATABASE_URL=postgres://miniflux:miniflux@db/miniflux?sslmode=disable
+      - RUN_MIGRATIONS=1
+      - CREATE_ADMIN=1
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=adminadmin
+      - DEBUG=1
+        
+      - OAUTH2_PROVIDER=oidc
+      - OAUTH2_CLIENT_ID=miniflux
+      - OAUTH2_CLIENT_SECRET=super-secret
+      - OAUTH2_REDIRECT_URL=http://miniflux.localtest.me/oauth2/oidc/callback
+      - OAUTH2_OIDC_DISCOVERY_ENDPOINT=http://idp.localtest.me
+      - OAUTH2_USER_CREATION=1
+
+  db:
+    image: postgres:18
+    container_name: miniflux_db
+    environment:  
+      - POSTGRES_DB=miniflux
+      - POSTGRES_USER=miniflux
+      - POSTGRES_PASSWORD=miniflux
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U miniflux"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  
+  caddy:
+    image: caddy:latest
+    container_name: gateway
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    networks:
+      default:
+        aliases:
+          - idp.localtest.me
+          - miniflux.localtest.me
+    depends_on:
+      - idp
+      - miniflux
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+
+networks:
+  default:
+    name: idp-network
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

@@ -17,7 +17,7 @@ namespace idp.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.0");
 
-            modelBuilder.Entity("OAuthClient", b =>
+            modelBuilder.Entity("idp.Models.AuthorizationCode", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -25,6 +25,107 @@ namespace idp.Migrations
 
                     b.Property<string>("ClientId")
                         .IsRequired()
+                        .HasMaxLength(25)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(25)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CodeChallenge")
+                        .IsRequired()
+                        .HasMaxLength(15)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CodeChallengeMethod")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Nonce")
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RedirectUri")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Used")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(25)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("AuthorizationCodes");
+                });
+
+            modelBuilder.Entity("idp.Models.Device", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeviceId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("LastUsed")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Location")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Devices");
+                });
+
+            modelBuilder.Entity("idp.Models.JwtTokenEntry", b =>
+                {
+                    b.Property<string>("Jti")
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("Expiry")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Jti");
+
+                    b.ToTable("JwtTokens");
+                });
+
+            modelBuilder.Entity("idp.Models.OAuthClient", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.PrimitiveCollection<string>("AllowedScopes")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ClientId")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ClientSecret")
+                        .IsRequired()
+                        .HasMaxLength(2048)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("RedirectUris")
@@ -33,6 +134,7 @@ namespace idp.Migrations
 
                     b.Property<string>("RedirectUrisJson")
                         .IsRequired()
+                        .HasMaxLength(2048)
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("RequirePkce")
@@ -43,7 +145,7 @@ namespace idp.Migrations
                     b.ToTable("OAuthClients");
                 });
 
-            modelBuilder.Entity("idp.Models.AuthorizationCode", b =>
+            modelBuilder.Entity("idp.Models.RefreshToken", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -51,49 +153,14 @@ namespace idp.Migrations
 
                     b.Property<string>("ClientId")
                         .IsRequired()
+                        .HasMaxLength(25)
                         .HasColumnType("TEXT");
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("CodeChallenge")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("CodeChallengeMethod")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("RedirectUri")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("Used")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("AuthorizationCodes");
-                });
-
-            modelBuilder.Entity("idp.Models.RefreshToken", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("CreatedByIp")
+                        .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("ExpiryDate")
@@ -102,22 +169,36 @@ namespace idp.Migrations
                     b.Property<bool>("IsRevoked")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("IsUsed")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("JwtId")
                         .IsRequired()
+                        .HasMaxLength(25)
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("MfaVerified")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("ReplacedByToken")
+                        .IsRequired()
+                        .HasMaxLength(150)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("RevokedByIp")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Scope")
+                        .HasMaxLength(15)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Token")
                         .IsRequired()
+                        .HasMaxLength(150)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("UserId")
-                        .IsRequired()
+                    b.Property<Guid>("UserId")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
@@ -127,40 +208,72 @@ namespace idp.Migrations
 
             modelBuilder.Entity("idp.Models.User", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("TEXT");
 
                     b.PrimitiveCollection<string>("BackupCodes")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Email")
+                    b.Property<Guid?>("DeviceId")
                         .HasColumnType("TEXT");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("EmailVerificationTokenExpiry")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("EmailVerificationTokenHash")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("EmailVerified")
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("IsTotpEnabled")
                         .HasColumnType("INTEGER");
 
+                    b.Property<long?>("LastTotpStepUsed")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("PasswordHash")
                         .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("PasswordResetTokenExpiry")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PasswordResetTokenHash")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("TotpFallbackTokenExpiry")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TotpFallbackTokenHash")
+                        .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("TotpSecret")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Username")
-                        .IsRequired()
+                        .HasMaxLength(30)
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("DeviceId");
 
                     b.ToTable("Users");
                 });
 
             modelBuilder.Entity("idp.Models.WebAuthnCredential", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
+                        .HasColumnType("TEXT");
 
                     b.Property<byte[]>("CredentialIdBytes")
                         .IsRequired()
@@ -173,14 +286,23 @@ namespace idp.Migrations
                     b.Property<uint>("SignCount")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int>("UserId")
-                        .HasColumnType("INTEGER");
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
                     b.HasIndex("UserId");
 
                     b.ToTable("WebAuthnCredentials");
+                });
+
+            modelBuilder.Entity("idp.Models.User", b =>
+                {
+                    b.HasOne("idp.Models.Device", "Device")
+                        .WithMany()
+                        .HasForeignKey("DeviceId");
+
+                    b.Navigation("Device");
                 });
 
             modelBuilder.Entity("idp.Models.WebAuthnCredential", b =>
