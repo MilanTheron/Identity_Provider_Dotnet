@@ -18,7 +18,7 @@ public class PipelineConfig : IConfigureApp
         );
 
         app.UseForwardedHeaders(forwardedHeadersOptions);
-
+        
         // Exception handling / HSTS / HTTPS
         app.UseExceptionHandler("/Error");
         app.UseHsts();

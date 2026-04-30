@@ -1,14 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using idp.Services;
-using Xunit;
+﻿using idp.Services;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace idp.Tests.Services;
 
 public class BackupCodeServiceTests
 {
-    private readonly BackupCodeService _backupCodeService = new();
+    private readonly BackupCodeService _backupCodeService = new BackupCodeService(NullLogger<BackupCodeService>.Instance);
 
     [Fact]
     public void GenerateBackupCodes_ReturnsCorrectCountAndLength()
@@ -66,7 +63,7 @@ public class BackupCodeServiceTests
         var hash1 = _backupCodeService.HashBackupCode(code);
         var hash2 = _backupCodeService.HashBackupCode(code);
 
-        Assert.Equal(hash1, hash2);
+        Assert.NotEqual(hash1, hash2);
     }
 
     [Fact]

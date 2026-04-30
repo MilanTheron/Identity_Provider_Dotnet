@@ -13,8 +13,8 @@
       - ./idp/keys:/app/keys
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
-      - Jwt__Issuer=http://idp.localtest.me
-      - Fido__Origin=http://idp.localtest.me
+      - Jwt__Issuer=http://idp.localtest.local
+      - Fido__Origin=http://idp.localtest.local
       - Smtp__Host=mailhog
       - Smtp__Port=1025
       - Smtp__From=noreply@local.testidp
@@ -46,8 +46,8 @@
       - OAUTH2_PROVIDER=oidc
       - OAUTH2_CLIENT_ID=miniflux
       - OAUTH2_CLIENT_SECRET=super-secret
-      - OAUTH2_REDIRECT_URL=http://miniflux.localtest.me/oauth2/oidc/callback
-      - OAUTH2_OIDC_DISCOVERY_ENDPOINT=http://idp.localtest.me
+      - OAUTH2_REDIRECT_URL=http://miniflux.localtest.local/oauth2/oidc/callback
+      - OAUTH2_OIDC_DISCOVERY_ENDPOINT=http://idp.localtest.local
       - OAUTH2_USER_CREATION=1
 
   db:
@@ -74,8 +74,8 @@
     networks:
       default:
         aliases:
-          - idp.localtest.me
-          - miniflux.localtest.me
+          - idp.localtest.local
+          - miniflux.localtest.local
     depends_on:
       - idp
       - miniflux

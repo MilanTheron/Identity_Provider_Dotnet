@@ -1,57 +1,85 @@
-﻿using System;
-using System.Collections.Generic;
-using idp.Services;
+﻿using idp.Services;
 using idp.Models;
-using System.Linq;
-using Xunit;
+using idp.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.IdentityModel.Tokens.Jwt;
 
-namespace idp.Tests.Services
+namespace idp.Tests.Services;
+
+public class TokenServiceTests
 {
-    public class TokenServiceTests
+    private readonly TokenService _tokenService;
+
+    public TokenServiceTests()
     {
-        private readonly TokenService _tokenService;
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase("TestDb")
+            .Options;
 
-        public TokenServiceTests()
-        {
-            // In-memory configuration for testing
-            var inMemorySettings = new Dictionary<string, string?>()
+        var dbContext = new AppDbContext(options);
+
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                { "Jwt:Key", "supersecretkey123456789012345678" }, // 32 chars = 256 bits
-                { "Jwt:Issuer", "TestIssuer" },
-                { "Jwt:Audience", "TestAudience" }
-            };
+                { "Hmac:Key", Convert.ToBase64String(new byte[32]) },
+                { "Jwt:Issuer", "test" },
+                { "Jwt:KeyId", "test-key" }
+            })
+            .Build();
 
-            var configuration = new ConfigurationBuilder()
-                .AddInMemoryCollection(inMemorySettings)
-                .Build();
+        _tokenService = new TokenService(
+            dbContext,
+            config,
+            NullLogger<TokenService>.Instance
+        );
+    }
 
-            _tokenService = new TokenService(configuration);
-        }
-
-        [Fact]
-        public void GenerateJwtToken_ReturnsNonEmptyString()
+    [Fact]
+    public async Task GenerateJwtToken_ReturnsNonEmptyString()
+    {
+        var user = new User
         {
-            var user = new User { Username = "testuser" };
-            var token = _tokenService.GenerateJwtToken(user);
+            Id = Guid.NewGuid(),
+            Email = "test@test.com",
+            PasswordHash = "hash",
+            EmailVerified = true
+        };
 
-            Assert.False(string.IsNullOrWhiteSpace(token));
-        }
+        var (token, _) = await _tokenService.GenerateJwtToken(
+            user,
+            true,
+            "profile",
+            "client"
+        );
 
-        [Fact]
-        public void GenerateJwtToken_ParsesCorrectly()
+        Assert.False(string.IsNullOrWhiteSpace(token));
+    }
+
+    [Fact]
+    public async Task GenerateJwtToken_ParsesCorrectly()
+    {
+        var user = new User
         {
-            var user = new User { Username = "testuser" };
-            var token = _tokenService.GenerateJwtToken(user);
+            Id = Guid.NewGuid(),
+            Email = "test@test.com",
+            PasswordHash = "hash",
+            EmailVerified = true
+        };
 
-            var handler = new JwtSecurityTokenHandler();
-            var jwtToken = handler.ReadJwtToken(token);
+        var (token, jti) = await _tokenService.GenerateJwtToken(
+            user,
+            true,
+            "profile",
+            "client"
+        );
 
-            // Basic assertions on token
-            Assert.Equal("testuser", jwtToken.Subject);
-            Assert.Equal("TestAudience", jwtToken.Audiences.FirstOrDefault());
-            Assert.NotNull(jwtToken.Id); // Jti claim exists
-        }
+        var handler = new JwtSecurityTokenHandler();
+        var jwtToken = handler.ReadJwtToken(token);
+
+        Assert.Equal(user.Id.ToString(), jwtToken.Subject);
+        Assert.Equal("client", jwtToken.Audiences.FirstOrDefault());
+        Assert.Equal(jti, jwtToken.Id);
     }
 }
