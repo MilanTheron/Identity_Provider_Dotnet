@@ -17,7 +17,7 @@ public class OAuthSeedConfig : IConfigureApp
                 ClientId = "miniflux",
                 RedirectUris = new List<string> 
                 { 
-                    "http://miniflux.localtest.me/oauth2/oidc/callback"
+                    "http://miniflux.localtest.local/oauth2/oidc/callback"
                 },
                 ClientSecret = "super-secret",
                 RequirePkce = true,

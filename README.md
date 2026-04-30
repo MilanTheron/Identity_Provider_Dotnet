@@ -323,17 +323,17 @@ curl -X POST http://localhost:5000/api/auth/register   -H "Content-Type: applica
 
 ### Login page
 ```bash
-http://idp.localtest.me/Auth
+http://idp.localtest.local/Auth
 ```
 
 ### Check if a mail has been sent to the user (using MailHog):
 ```bash
-http://idp.localtest.me:8025/
+http://localhost:8025/
 ```
 
 ### Miniflux page
 ```bash
-http://miniflux.localtest.me/
+http://miniflux.localtest.local/
 ```
 
 ### Get log of the application:
