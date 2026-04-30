@@ -2,10 +2,10 @@
     auto_https off
 }
 
-http://idp.localtest.local {
+http://idp.localtest.me {
     reverse_proxy http://idp:8080
 }
 
-http://miniflux.localtest.local {
+http://miniflux.localtest.me {
     reverse_proxy http://miniflux:8080
 }
