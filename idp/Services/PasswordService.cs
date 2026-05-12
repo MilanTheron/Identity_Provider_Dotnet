@@ -2,6 +2,7 @@
 using Konscious.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace idp.Services;
 
@@ -12,6 +13,11 @@ public class PasswordService
     public PasswordService(ILogger<PasswordService> logger)
     {
         _logger = logger;
+    }
+    
+    public PasswordService()
+    {
+        _logger = NullLogger<PasswordService>.Instance;
     }
     
     public string HashPassword(string password)

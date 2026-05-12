@@ -5,20 +5,23 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Cryptography;
 
 namespace idp.Tests.Services;
 
-public class TokenServiceTests
+public class TokenServiceTests : IDisposable
 {
     private readonly TokenService _tokenService;
+    private readonly RSA _testRsa;
 
     public TokenServiceTests()
     {
-        var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase("TestDb")
-            .Options;
+        _testRsa = RSA.Create(2048);
+        SecurityService.UseRsaForTesting(_testRsa);
 
-        var dbContext = new AppDbContext(options);
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
 
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -30,10 +33,16 @@ public class TokenServiceTests
             .Build();
 
         _tokenService = new TokenService(
-            dbContext,
+            new AppDbContext(options),
             config,
             NullLogger<TokenService>.Instance
         );
+    }
+
+    public void Dispose()
+    {
+        SecurityService.UseRsaForTesting(null);
+        _testRsa.Dispose();
     }
 
     [Fact]

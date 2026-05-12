@@ -7,7 +7,10 @@ namespace idp.Services;
 
 public class SecurityService
 {
-    public static RSA Rsa => _rsa.Value;
+    private static RSA? _testRsa;
+
+    public static RSA Rsa => _testRsa ?? _rsa.Value;
+
     private static readonly Lazy<RSA> _rsa = new(() =>
     {
         var config = new ConfigurationBuilder()
@@ -25,6 +28,9 @@ public class SecurityService
 
         return rsa;
     });
+
+    /// <summary>For unit tests only.</summary>
+    public static void UseRsaForTesting(RSA? rsa) => _testRsa = rsa;
 
     // JTI validation
     public static async Task<bool> ValidateJtiAsync(AppDbContext db, string jti)
