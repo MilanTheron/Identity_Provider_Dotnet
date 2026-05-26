@@ -80,34 +80,31 @@ public class AuthService
         {
             if (user.TotpFallbackTokenExpiry < DateTime.UtcNow)
                 return false;
-
+            
             var hashed = _tokenService.HashToken(fallbackToken);
-
+            
             if (!CryptographicOperations.FixedTimeEquals(
                 Convert.FromBase64String(user.TotpFallbackTokenHash),
                 Convert.FromBase64String(hashed)))
                 return false;
-
+            
             user.TotpFallbackTokenHash = null;
             user.TotpFallbackTokenExpiry = null;
             return true;
         }
-
+        
         // ---- backup ----
         if (string.IsNullOrWhiteSpace(backupCode) || user.BackupCodes?.Count == 0)
             return false;
-
-        var hashedInput = _backupCodeService.HashBackupCode(backupCode.Trim());
-
+        
+        var trimmed = backupCode.Trim();
+        
         var match = user.BackupCodes.FirstOrDefault(stored =>
-            CryptographicOperations.FixedTimeEquals(
-                Convert.FromBase64String(stored),
-                Convert.FromBase64String(hashedInput)
-            ));
-
+            _backupCodeService.VerifyBackupCode(trimmed, stored));
+        
         if (match == null)
             return false;
-
+        
         user.BackupCodes.Remove(match);
         return true;
     }

@@ -54,4 +54,36 @@ public class BackupCodeService
         }
         return new string(result);
     }
+    
+    public bool VerifyBackupCode(string code, string storedValue)
+    {
+        try
+        {
+            var parts = storedValue.Split(':');
+            
+            if (parts.Length != 2)
+                return false;
+            
+            var salt = Convert.FromBase64String(parts[0]);
+            var expectedHash = Convert.FromBase64String(parts[1]);
+            
+            using var hasher = new Argon2id(Encoding.UTF8.GetBytes(code));
+            
+            hasher.Salt = salt;
+            hasher.DegreeOfParallelism = 8;
+            hasher.MemorySize = 65536;
+            hasher.Iterations = 5;
+            
+            var actualHash = hasher.GetBytes(32);
+            
+            return CryptographicOperations.FixedTimeEquals(
+                actualHash,
+                expectedHash
+            );
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }

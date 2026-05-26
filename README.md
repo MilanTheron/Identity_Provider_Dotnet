@@ -292,18 +292,18 @@ openssl rsa -pubout -in keys/private.pem -out keys/public.pem
 - Token validation testing
 
 ### Implementation Status
-- ⏳ Unit tests for services
+- ✅ Unit tests for services
 - ⏳ Integration tests for auth flows
-- ⏳ Simulate attack scenarios
-- ❌ Validate token expiration and revocation
-- ❌ Test MFA edge cases (clock drift, reuse)
+- ✅ Simulate attack scenarios
+- ✅ Validate token expiration and revocation
+- ✅ Test MFA edge cases (clock drift, reuse)
 
 ##### Test command used:
 ```bash
 dotnet test
 ```
 
-**Status**: Not started
+**Files**: `idp.Tests.cs`
 
 ---
 
@@ -311,14 +311,6 @@ dotnet test
 ### Build and run the application using Docker:
 ```bash
 docker compose up -d --build
-```
-
-### Curl to test API:
-```bash
-curl -X POST http://localhost:5000/api/auth/register   -H "Content-Type: application/json"   -d '{
-    "email": "test@example.com",
-    "password": "StrongPass1tyujsqdqs54===23!"
-    }'
 ```
 
 ### Login page
@@ -346,62 +338,16 @@ docker logs idp_app
 docker logs identity_provider_dotnet-mailhog-1
 ```
 
-### Get log of the mailhog container:
+### Remove volume:
 ```bash
-docker rm -f idp_app identity_provider_dotnet-mailhog-1
+docker volume rm -f idp_app miniflux_db identity_provider_dotnet-mailhog-1 miniflux_app
 ```
 
 ---
 ## Next Steps (Priority Order)
 
-### **CRITICAL - FIX IMMEDIATELY**
-1. Return Backup Codes after TOTP setup
-
-### **HIGH PRIORITY**
-2. Redirect unauthenticated users in OAuth authorize endpoint
-
-### **MEDIUM PRIORITY**
-3. Add WebAuthn flow proper integration
-4. Add Redis for distributed rate limiting
-5. Device tracking and session management
-6. Anomaly detection (geo-IP)
-7. Comprehensive audit logging
-
----
-
-### Different curl request for testing(outdated):
-1. Register a new user:
-```bash
-curl -k https://127.0.0.1:5001/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"username":"test","password":"Test123!Strong"}'
-```
-2. Login with the new user:
-```bash
-curl -k https://127.0.0.1:5001/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"test","password":"Test123!Strong"}'
-```
-3. Enable MFA for the user (replace #TOKEN with actual JWT token):
-```bash
-curl -k https://127.0.0.1:5001/api/totp/setup-totp \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer #TOKEN" \
-  -d '{"username":"test"}'
-```
-4. Login with MFA (replace CODE with actual TOTP code):
-```bash
-curl -k https://127.0.0.1:5001/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"test","password":"Test123!Strong","totpCode":"CODE"}'
-```
-5. Change password (replace #TOKEN with actual JWT token):
-```bash
-curl -k https://127.0.0.1:5001/api/auth/change-password \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer #TOKEN" \
-  -d '{"OldPassword":"Test123!Strong","NewPassword":"StrongestEverEverEver123123123!!!!@@@@"}'
-```
+1. Add WebAuthn flow proper integration
+2. Comprehensive audit logging
 
 ---
 

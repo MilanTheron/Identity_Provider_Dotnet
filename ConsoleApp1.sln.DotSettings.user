@@ -4,5 +4,6 @@
     &lt;TestId&gt;xUnit::BECA713B-3DF8-4981-88D1-BBE985B888BA::net9.0::idp.Tests.Services.PasswordServiceTests&lt;/TestId&gt;&#xD;
     &lt;TestId&gt;xUnit::BECA713B-3DF8-4981-88D1-BBE985B888BA::net9.0::idp.Tests.Services.SecurityServieTests&lt;/TestId&gt;&#xD;
     &lt;TestId&gt;xUnit::BECA713B-3DF8-4981-88D1-BBE985B888BA::net9.0::idp.Tests.Services.TokenServiceTests&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;xUnit::BECA713B-3DF8-4981-88D1-BBE985B888BA::net9.0::idp.Tests.Services.AuthServiceTests&lt;/TestId&gt;&#xD;
   &lt;/TestAncestor&gt;&#xD;
 &lt;/SessionState&gt;</s:String></wpf:ResourceDictionary>
